@@ -7,7 +7,7 @@ import { MODE_NAMES } from './teacher.js';
 
 const RED = '#e5484d';
 const BLUE = '#3d63dd';
-const GREEN = '#12773f';
+const GREEN = '#0f6b38';
 
 function ropeChart(rope, names) {
   const W = 640; const H = 220; const P = 28;
@@ -33,7 +33,7 @@ function donut(part, total, color = GREEN) {
 }
 
 const bar = (value, color) => h('div', { class: 'pbar' }, h('i', { style: { width: `${Math.min(100, value)}%`, background: color } }));
-const pctColor = (p) => (p >= 70 ? 'var(--ok)' : p >= 40 ? 'var(--y600)' : 'var(--bad)');
+const pctColor = (p) => (p >= 70 ? 'var(--ok)' : p >= 40 ? 'var(--part)' : 'var(--bad)');
 const fmtAnswer = (a) => (a === 'true' ? t('Верно') : a === 'false' ? t('Неверно') : a);
 
 export async function report(id) {
@@ -52,7 +52,7 @@ export async function report(id) {
   const teamCards = teams ? h('div', { class: 'grid', style: { gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))' } }, ['A', 'B'].map((tm) => {
     const x = teams[tm];
     return h('div', { class: 'card stack', style: { borderTop: `6px solid ${tm === 'A' ? RED : BLUE}` } },
-      h('div', { class: 'row between' }, h('h3', { style: { margin: 0, color: tm === 'A' ? RED : BLUE } }, x.name), g.winner === tm ? h('span', { class: 'chip', style: { background: 'var(--y)', color: 'var(--g900)' } }, `🏆 ${t('победа')}`) : null),
+      h('div', { class: 'row between' }, h('h3', { style: { margin: 0, color: tm === 'A' ? RED : BLUE } }, x.name), g.winner === tm ? h('span', { class: 'chip' }, h('span', { class: 'ribbon', style: { width: '6px', height: '12px' } }), t('победа')) : null),
       h('div', { class: 'row', style: { gap: '26px' } },
         g.mode === 'board' ? [stat(x.correct, t('верных')), stat(x.wrong, t('ошибок'))] : [stat(x.score, t('очков')), stat(`${x.correct}/${x.answered}`, t('верных'))],
         stat(x.avgTime ? `${x.avgTime} ${t('с')}` : '—', g.mode === 'board' ? t('на пример') : t('ср. время')),
@@ -84,8 +84,8 @@ export async function report(id) {
         h('button', { class: 'btn primary', onClick: () => { toast(t('В окне печати выберите «Сохранить как PDF»')); setTimeout(() => window.print(), 300); } }, ic('print'), t('Скачать PDF')),
         h('button', { class: 'btn danger', onClick: del }, ic('trash'), t('Удалить')))),
     h('div', { class: 'stack' },
-      g.winner ? h('div', { class: 'card dark', style: { background: 'linear-gradient(135deg, var(--g700), var(--g900))', color: '#fff' } },
-        h('div', { class: 'row between' }, h('h2', { style: { margin: 0 } }, g.winner === 'draw' ? `🤝 ${t('Ничья')}` : `🏆 ${t('Победила команда')} «${teams[g.winner].name}»`),
+      g.winner ? h('div', { class: 'card dark' },
+        h('div', { class: 'row between' }, h('h2', { class: 'row', style: { margin: 0, gap: '12px' } }, g.winner === 'draw' ? null : h('span', { class: 'ribbon' }), g.winner === 'draw' ? t('Ничья') : `${t('Победила команда')} «${teams[g.winner].name}»`),
           h('div', { class: 'row', style: { gap: '26px' } }, g.mode === 'board' ? null : stat(players.length, t('участников')), stat(fmtDur(duration), t('длительность'))))) : null,
       !teams && players.length ? card(null, h('div', { class: 'row', style: { gap: '30px' } }, stat(players.length, t('участников')), stat(fmtDur(duration), t('длительность')),
         stat(`${pct(totalCorrect, totalAnswers)}%`, t('верных ответов')), stat(players[0]?.name || '—', t('победитель')))) : null,
@@ -97,10 +97,10 @@ export async function report(id) {
             hardest ? h('div', null, `${t('Самый сложный')}: `, h('b', null, `№${hardest.i + 1} (${hardest.p}%)`)) : null,
             easiest ? h('div', null, `${t('Самый лёгкий')}: `, h('b', null, `№${easiest.i + 1} (${easiest.p}%)`)) : null))) : null,
         players.length ? card(t('Лучшие'),
-          h('div', { class: 'small' }, h('b', null, `🏆 ${t('Топ-5')}: `), players.slice(0, 5).map((p) => `${p.name} (${p.score})`).join(', ')),
-          fastest.length ? h('div', { class: 'small' }, h('b', null, `⚡ ${t('Самые быстрые')}: `), fastest.map((p) => `${p.name} (${p.avgTime} ${t('с')})`).join(', ')) : null,
-          accurate.length ? h('div', { class: 'small' }, h('b', null, `🎯 ${t('Самые точные')}: `), accurate.map((p) => `${p.name} (${pct(p.correct, p.answered)}%)`).join(', ')) : null,
-          h('div', { class: 'small' }, h('b', null, `🔥 ${t('Лучшая серия')}: `), (() => { const b = [...players].sort((a, c) => c.bestStreak - a.bestStreak)[0]; return b ? `${b.name} (${b.bestStreak})` : '—'; })())) : null),
+          h('div', { class: 'small' }, h('b', null, `${t('Топ-5')}: `), players.slice(0, 5).map((p) => `${p.name} (${p.score})`).join(', ')),
+          fastest.length ? h('div', { class: 'small' }, h('b', null, `${t('Самые быстрые')}: `), fastest.map((p) => `${p.name} (${p.avgTime} ${t('с')})`).join(', ')) : null,
+          accurate.length ? h('div', { class: 'small' }, h('b', null, `${t('Самые точные')}: `), accurate.map((p) => `${p.name} (${pct(p.correct, p.answered)}%)`).join(', ')) : null,
+          h('div', { class: 'small' }, h('b', null, `${t('Лучшая серия')}: `), (() => { const b = [...players].sort((a, c) => c.bestStreak - a.bestStreak)[0]; return b ? `${b.name} (${b.bestStreak})` : '—'; })())) : null),
       questions.length ? card(t('Статистика по вопросам'), h('div', { class: 'tbl-wrap' }, h('table', { class: 'tbl' },
         h('thead', null, h('tr', null, h('th', null, '№'), h('th', null, t('Вопрос')), h('th', null, t('Ответ')), h('th', null, t('Верно')), h('th', null, t('Ср. время')),
           teams ? [h('th', { style: { color: RED } }, names[0]), h('th', { style: { color: BLUE } }, names[1])] : null)),
@@ -117,16 +117,16 @@ export async function report(id) {
         h('thead', null, h('tr', null, h('th', null, '#'), h('th', null, t('Имя')), teams ? h('th', null, t('Команда')) : null, h('th', null, t('Очки')),
           h('th', null, t('Верно')), h('th', null, t('Ср. время')), h('th', null, t('Серия')), teams ? h('th', null, t('Вклад')) : null)),
         h('tbody', null, players.map((p) => h('tr', null, h('td', null, p.place), h('td', null, h('b', null, p.name)),
-          teams ? h('td', { style: { color: p.team === 'A' ? RED : BLUE, fontWeight: 800 } }, teams[p.team]?.name || '—') : null,
+          teams ? h('td', { style: { color: p.team === 'A' ? RED : BLUE, fontWeight: 500 } }, teams[p.team]?.name || '—') : null,
           h('td', null, h('b', null, p.score)), h('td', null, `${p.correct}/${questions.length} (${pct(p.correct, questions.length)}%)`),
           h('td', null, p.avgTime !== null ? `${p.avgTime} ${t('с')}` : '—'), h('td', null, p.bestStreak),
           teams ? h('td', null, `${pct(p.score, teamScore(p.team))}%`) : null)))))) : null,
-      players.length && questions.length ? h('details', { class: 'card' }, h('summary', { style: { cursor: 'pointer', fontWeight: 800 } }, t('Ответы каждого ученика')),
+      players.length && questions.length ? h('details', { class: 'card' }, h('summary', { style: { cursor: 'pointer', fontWeight: 500 } }, t('Ответы каждого ученика')),
         h('div', { class: 'tbl-wrap', style: { marginTop: '12px' } }, h('table', { class: 'tbl' },
           h('thead', null, h('tr', null, h('th', null, t('Имя')), questions.map((_, i) => h('th', null, i + 1)))),
           h('tbody', null, players.map((p) => h('tr', null, h('td', null, h('b', null, p.name)), p.answers.map((a) => h('td', {
             title: a ? `${fmtAnswer(a.v)} · ${a.t} ${t('с')} · +${a.p}` : t('нет ответа'),
-            style: { background: !a ? '#f1f5f9' : a.g === 1 ? 'var(--ok-s)' : a.g > 0 ? 'var(--y100)' : 'var(--bad-s)', textAlign: 'center', fontSize: '.8rem' },
+            style: { background: !a ? '#f1f5f9' : a.g === 1 ? 'var(--ok-s)' : a.g > 0 ? 'var(--part-s)' : 'var(--bad-s)', textAlign: 'center', fontSize: '.8rem' },
           }, a ? (a.g === 1 ? '✓' : a.g > 0 ? '½' : '✗') : '—')))))))) : null,
       h('div', { class: 'small muted center', style: { marginTop: '10px' } }, 'TugQuiz · SL165 · Developed by Daniyar')));
 }

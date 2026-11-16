@@ -19,7 +19,7 @@ function header() {
     me
       ? [h('a', { class: 'btn sm hide-sm', href: isTeacher() ? '#/t' : '#/s' }, ic('user'), me.name.split(' ')[0]),
         h('button', { class: 'btn sm icon', title: t('Выйти'), 'aria-label': t('Выйти'), html: icon('logout'), onClick: logout })]
-      : h('a', { class: 'btn sm yellow', href: '#/login' }, t('Войти'))));
+      : h('a', { class: 'btn sm primary', href: '#/login' }, t('Войти'))));
 }
 
 export const footer = () => h('footer', { class: 'foot' }, h('div', { class: 'in' },
@@ -36,19 +36,19 @@ export const page = (...content) => h('div', null, header(), h('main', null, con
 
 // ---------- меню учителя ----------
 const NAV = [
-  ['', 'home', 'Главная'], ['quizzes', 'grid', 'Мои квизы'], ['library', 'book', 'Библиотека'], ['ai', 'spark', 'ИИ-генератор'],
+  ['', 'home', 'Главная'], ['quizzes', 'grid', 'Мои квизы'], ['library', 'book', 'Библиотека'], ['ai', 'msg', 'ИИ-генератор'],
   ['board', 'rope', 'Канат на доске'], ['history', 'chart', 'История игр'], ['guide', 'help', 'Гайд'], ['settings', 'sliders', 'Настройки'],
 ];
 const navItems = () => (store.me?.role === 'admin' ? [...NAV, ['admin', 'shield', 'Администратор']] : NAV);
 
 export function teacherPage(active, ...content) {
   const link = ([key, ico, label]) => h('a', { href: `#/t${key ? `/${key}` : ''}`, class: active === key ? 'on' : '', 'data-nav': key || 'home' },
-    h('span', { html: icon(ico), style: { display: 'contents' } }), t(label), key === 'guide' && !store.me.tour_done ? h('span', { class: 'badge' }, t('новое')) : null);
+    h('span', { html: icon(ico), style: { display: 'contents' } }), t(label));
   const mobile = ['', 'quizzes', 'ai', 'board'];
   return h('div', null, header(),
     h('div', { class: 'shell' },
       h('nav', { class: 'side', 'aria-label': t('Меню учителя') },
-        h('a', { class: 'btn primary create', href: '#/t/edit/new', 'data-nav': 'create', style: { color: '#fff' } }, ic('plus'), t('Создать квиз')),
+        h('a', { class: 'create', href: '#/t/edit/new', 'data-nav': 'create' }, ic('plus'), t('Создать квиз')),
         navItems().slice(0, 6).map(link), h('div', { class: 'sep' }), navItems().slice(6).map(link)),
       h('div', { class: 'main' }, content)),
     h('nav', { class: 'mnav' },

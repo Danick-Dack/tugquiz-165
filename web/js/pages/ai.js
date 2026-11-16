@@ -62,7 +62,7 @@ export async function aiPage() {
     photo,
     h('div', { class: 'row' }, h('b', null, t('Сколько')), seg('count', [[5, '5'], [10, '10'], [15, '15'], [20, '20'], [30, '30']])),
     h('div', { class: 'row' }, h('b', null, t('Типы')), typeChips),
-    h('details', null, h('summary', { style: { cursor: 'pointer', fontWeight: 800, color: 'var(--g700)' } }, t('Дополнительно')),
+    h('details', null, h('summary', { style: { cursor: 'pointer', fontWeight: 500, color: 'var(--sub)' } }, t('Дополнительно')),
       h('div', { class: 'stack', style: { marginTop: '12px' } },
         h('div', { class: 'row' }, h('b', null, t('Язык')), seg('lang', [['ru', 'Русский'], ['kk', 'Қазақша'], ['en', 'English']])),
         h('div', { class: 'row' }, h('b', null, t('Сложность')), seg('difficulty', [['лёгкая', 'лёгкая'], ['средняя', 'средняя'], ['сложная', 'сложная'], ['олимпиадная', 'олимпиадная']])),
@@ -72,7 +72,7 @@ export async function aiPage() {
     const keep = new Set(data.questions.map((_, i) => i));
     const title = h('input', { class: 'input', value: data.title || p.topic || t('Квиз от ИИ') });
     fill(result, h('div', { class: 'card stack', style: { marginTop: '18px' } },
-      h('h2', { style: { margin: 0 } }, `✨ ${t('Готово')}: ${data.questions.length} ${t('вопросов')}`),
+      h('h2', { style: { margin: 0 } }, `${t('Готово')}: ${data.questions.length} ${t('вопросов')}`),
       h('div', { class: 'row' },
         h('button', { class: 'btn primary', onClick: () => {
           const questions = data.questions.filter((_, i) => keep.has(i));
@@ -80,7 +80,7 @@ export async function aiPage() {
           sessionStorage.setItem('tq_draft', JSON.stringify({ title: title.value, subject: p.subject, grade: p.grade, lang: p.lang, description: p.topic, shared: 0, questions }));
           go('#/t/edit/new');
         } }, ic('edit'), t('Открыть в редакторе')),
-        data.questions.some((q) => BOARD.includes(q.type)) ? h('button', { class: 'btn yellow', onClick: async () => {
+        data.questions.some((q) => BOARD.includes(q.type)) ? h('button', { class: 'btn', onClick: async () => {
           const questions = data.questions.filter((q, i) => keep.has(i) && BOARD.includes(q.type));
           if (!questions.length) return toastErr(new Error(t('Отметьте хотя бы один вопрос')));
           try {
@@ -95,12 +95,12 @@ export async function aiPage() {
       data.errors?.length ? h('div', { class: 'small', style: { color: 'var(--bad)' } }, `${t('Пропущено')}: ${data.errors.join('; ')}`) : null,
       h('p', { class: 'small muted' }, t('ИИ может ошибаться — проверьте ответы. Снимите галочку с лишних вопросов.')),
       data.questions.map((q, i) => h('label', { class: 'list-row', style: { alignItems: 'flex-start', cursor: 'pointer' } },
-        h('input', { type: 'checkbox', checked: true, style: { width: '20px', height: '20px', marginTop: '4px', accentColor: 'var(--g600)' },
+        h('input', { type: 'checkbox', checked: true, style: { width: '20px', height: '20px', marginTop: '4px', accentColor: 'var(--muted)' },
           onChange: (e) => (e.target.checked ? keep.add(i) : keep.delete(i)) }),
         h('div', { class: 'grow' }, h('div', { class: 'row', style: { gap: '6px' } }, h('b', null, `${i + 1}.`), h('span', { class: 'chip' }, t(TYPE_LABELS.find(([x]) => x === q.type)[1]))),
           questionEl(q),
           q.type === 'choice' ? h('div', { class: 'small muted' }, q.options.map((o, k) => `${'ABCDEF'[k]}) ${o.text}`).join('   ')) : null,
-          h('div', { class: 'small', style: { color: 'var(--ok)', fontWeight: 800 } }, `✓ ${correctLabel(q) || t('оценивает учитель')}`))))));
+          h('div', { class: 'small', style: { color: 'var(--ok)', fontWeight: 500 } }, `✓ ${correctLabel(q) || t('оценивает учитель')}`))))));
     result.scrollIntoView({ behavior: 'smooth' });
   }
 
@@ -110,9 +110,9 @@ export async function aiPage() {
         btn.disabled = true;
         fill(btn, h('span', { class: 'wait-dots' }, t('ИИ думает')));
         try { showResult(await api('/api/ai/generate', { method: 'POST', body: p })); } catch (e) { toastErr(e); } finally {
-          btn.disabled = false; fill(btn, h('span', { html: icon('spark'), style: { display: 'contents' } }), t('Сгенерировать'));
+          btn.disabled = false; fill(btn, h('span', { html: icon('msg'), style: { display: 'contents' } }), t('Сгенерировать'));
         }
-      } }, h('span', { html: icon('spark'), style: { display: 'contents' } }), t('Сгенерировать'));
+      } }, h('span', { html: icon('msg'), style: { display: 'contents' } }), t('Сгенерировать'));
       fill(tabBox, h('div', { class: 'stack' },
         status.enabled ? h('p', { class: 'muted' }, t('Вопросы появятся через 10–40 секунд. Ничего платить не нужно.'))
           : h('p', null, t('Администратор ещё не подключил ключ ИИ. Используйте способ «Через любой чат» — он бесплатный и работает сразу.'),
@@ -132,7 +132,7 @@ export async function aiPage() {
         promptBox)),
       h('div', { class: 'guide-step' }, h('div', { class: 'n' }, '2'), h('div', { class: 'stack' },
         h('b', null, t('Вставьте его в любой бесплатный чат с ИИ')),
-        p.image ? h('div', { class: 'chip', style: { background: 'var(--y100)', color: '#7a6a00' } }, ic('image', { style: { width: '14px' } }), t('Прикрепите в чат то же фото с примерами')) : null,
+        p.image ? h('div', { class: 'chip' }, ic('image', { style: { width: '14px' } }), t('Прикрепите в чат то же фото с примерами')) : null,
         h('div', { class: 'row' }, CHATS.map(([name, url]) => h('a', { class: 'btn sm', href: url, target: '_blank', rel: 'noopener' }, name, ' ↗'))))),
       h('div', { class: 'guide-step' }, h('div', { class: 'n' }, '3'), h('div', { class: 'stack' },
         h('b', null, t('Скопируйте ответ и вставьте сюда')), answer,
@@ -147,7 +147,7 @@ export async function aiPage() {
   drawTab();
 
   return teacherPage('ai',
-    h('div', { class: 'page-head' }, h('div', null, h('h1', null, `✨ ${t('ИИ-генератор вопросов')}`),
+    h('div', { class: 'page-head' }, h('div', null, h('h1', null, t('ИИ-генератор вопросов')),
       h('p', { class: 'muted', style: { margin: '6px 0 0' } }, t('Опишите тему — нейросеть составит вопросы, а вы проверите и запустите игру. Бесплатно.')))),
     h('div', { class: 'editor', style: { gridTemplateColumns: 'minmax(0,1fr) minmax(0,1fr)' } }, form, h('div', { class: 'card stack' }, tabs, tabBox)),
     result);

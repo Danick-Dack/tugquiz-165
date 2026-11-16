@@ -48,7 +48,7 @@ export async function boardSetup() {
   return teacherPage('board',
     h('div', { class: 'page-head' }, h('div', null, h('h1', null, t('Канат на доске')),
       h('p', { class: 'muted', style: { margin: '6px 0 0' } }, t('Арқан тартыс без телефонов: два ученика у интерактивной доски, у каждого свои примеры. Верный ответ — рывок каната на свою сторону.'))),
-      h('button', { class: 'btn yellow big', onClick: start }, ic('play'), t('Начать'))),
+      h('button', { class: 'btn primary big', onClick: start }, ic('play'), t('Начать'))),
     h('div', { class: 'editor', style: { gridTemplateColumns: 'minmax(0,1fr) minmax(0,1fr)' } },
       h('div', { class: 'card stack' }, h('h3', null, t('Вопросы')), srcSeg, srcBox),
       h('div', { class: 'card stack' }, h('h3', null, t('Команды и правила')),
@@ -147,7 +147,7 @@ export function boardPlay() {
     side.panel.classList.add(cls);
     setTimeout(() => side.panel.classList.remove(cls), 450);
   };
-  const drawScore = () => fill(score, h('span', { class: 'tA', style: { color: 'var(--red-d)' } }, sides.A.correct), ':', h('span', { style: { color: 'var(--blue-d)' } }, sides.B.correct));
+  const drawScore = () => fill(score, h('span', { style: { color: 'var(--red-d)' } }, sides.A.correct), ':', h('span', { style: { color: 'var(--blue-d)' } }, sides.B.correct));
   sides.A = makeSide('A');
   sides.B = makeSide('B');
   drawScore();
@@ -159,7 +159,7 @@ export function boardPlay() {
   const mid = h('div', { class: 'mid' },
     h('img', { src: '/img/icon-192.png', alt: '', style: { width: '56px' } }),
     h('h2', null, `Арқан тартыс · ${cfg.title}`), clock, h('div', { style: { width: '100%', borderRadius: '16px', overflow: 'hidden' } }, tug.el), score, midBtns,
-    h('div', { class: 'dev', style: { color: 'var(--g700)' } }, 'Developed by Daniyar'));
+    h('div', { class: 'dev' }, 'Developed by Daniyar'));
   const root = h('div', { class: 'bt' }, sides.A.panel, mid, sides.B.panel, overlay);
   const fmt = (sec) => { const s = Math.ceil(sec); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
   clock.textContent = fmt(cfg.duration);
@@ -184,7 +184,7 @@ export function boardPlay() {
         return;
       }
       overlay.classList.remove('hidden');
-      fill(overlay, h('div', null, h('div', { style: { fontSize: '1.8rem', fontWeight: 900 } }, 'Арқан тартыс!'), h('b', null, n)));
+      fill(overlay, h('div', null, h('div', { style: { fontSize: '24px', fontWeight: 500, color: 'var(--d-sub)' } }, 'Арқан тартыс'), h('b', null, n)));
       sound.tick();
       n--;
       setTimeout(tick, 900);
@@ -202,10 +202,11 @@ export function boardPlay() {
     if (winner !== 'draw') confetti([winner === 'A' ? '#e5484d' : '#3d63dd', '#f6e21a', '#fff']);
     overlay.classList.remove('hidden');
     fill(overlay, h('div', { class: 'winner' },
-      h('h1', null, winner === 'draw' ? t('Ничья!') : `🏆 ${cfg.teamNames[winner === 'A' ? 0 : 1]}`),
-      h('div', { style: { fontSize: '1.3rem' } }, `${sides.A.correct} : ${sides.B.correct}`),
+      winner === 'draw' ? null : h('span', { class: 'ribbon' }),
+      h('h1', null, winner === 'draw' ? t('Ничья') : cfg.teamNames[winner === 'A' ? 0 : 1]),
+      h('div', { style: { fontSize: '24px', color: 'var(--d-sub)' } }, `${sides.A.correct} : ${sides.B.correct}`),
       h('div', { class: 'row', style: { justifyContent: 'center', marginTop: '20px' } },
-        h('button', { class: 'btn yellow big', onClick: () => { overlay.classList.add('hidden'); begin(); } }, t('Ещё раз')),
+        h('button', { class: 'btn primary big', onClick: () => { overlay.classList.add('hidden'); begin(); } }, t('Ещё раз')),
         h('button', { class: 'btn big', onClick: () => overlay.classList.add('hidden') }, t('Посмотреть канат')))));
     startBtn.classList.remove('hidden');
     const team = (s, i) => {
@@ -222,8 +223,8 @@ export function boardPlay() {
     } catch (e) { toastErr(e); }
   }
   const stats = (s) => h('div', { class: 'bq', style: { flexDirection: 'column', display: 'flex', gap: '6px' } },
-    h('div', null, `✓ ${s.correct}`), h('div', { style: { fontSize: '1.2rem', color: 'var(--muted)' } }, `✗ ${s.wrong}`),
-    s.times.length ? h('div', { style: { fontSize: '1.1rem', color: 'var(--muted)' } }, `⏱ ${(s.times.reduce((a, b) => a + b, 0) / s.times.length).toFixed(1)} ${t('с')}`) : null);
+    h('div', null, `✓ ${s.correct}`), h('div', { style: { fontSize: '20px', color: 'var(--muted)' } }, `✗ ${s.wrong}`),
+    s.times.length ? h('div', { style: { fontSize: '18px', color: 'var(--muted)' } }, `${(s.times.reduce((a, b) => a + b, 0) / s.times.length).toFixed(1)} ${t('с')}`) : null);
 
   const loop = setInterval(() => {
     if (state !== 'play') return;

@@ -48,7 +48,7 @@ export function subj(key) {
   const s = store.meta?.subjects.find((x) => x.key === key) || { ru: '—', kk: '—', color: '#64748b' };
   return { name: lang() === 'kk' ? s.kk : s.ru, color: s.color };
 }
-export const subjChip = (key) => { const s = subj(key); return h('span', { class: 'chip dot', style: { color: s.color, background: `${s.color}18` } }, s.name); };
+export const subjChip = (key) => { const s = subj(key); return h('span', { class: 'chip' }, h('i', { class: 'dot', style: { background: s.color } }), s.name); };
 
 const KK_MONTHS = ['қаңтар', 'ақпан', 'наурыз', 'сәуір', 'мамыр', 'маусым', 'шілде', 'тамыз', 'қыркүйек', 'қазан', 'қараша', 'желтоқсан'];
 export function fmtDate(ms, withTime = true) {
@@ -224,7 +224,8 @@ const ICONS = {
   italic: '<path d="M19 4h-9M14 20H5M15 4 9 20"/>',
   under: '<path d="M6 4v6a6 6 0 0 0 12 0V4M4 20h16"/>',
   upload: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/>',
-  msg: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
+  msg: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><path d="M8 9h8M8 13h5"/>',
+  medal: '<circle cx="12" cy="15" r="6"/><path d="M8.2 10.1 5 3h4l3 6M15.8 10.1 19 3h-4l-2.2 4.6"/>',
 };
 export const icon = (name) =>
   `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name] || ''}</svg>`;

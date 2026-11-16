@@ -33,9 +33,8 @@ function quizCard(q, { mine, onChange }) {
     previewQuiz(full);
   };
   return h('div', { class: 'card qcard' },
-    h('div', { class: 'band', style: { background: s.color } }),
     h('div', { class: 'row', style: { gap: '6px' } }, subjChip(q.subject), q.grade ? h('span', { class: 'chip' }, `${q.grade} ${t('класс')}`) : null,
-      q.template ? h('span', { class: 'chip', style: { background: 'var(--y100)', color: '#7a6a00' } }, t('шаблон')) : null,
+      q.template ? h('span', { class: 'chip' }, t('шаблон')) : null,
       mine && q.shared ? h('span', { class: 'chip', title: t('Видят все учителя') }, ic('globe', { style: { width: '14px' } }), t('общий')) : null),
     h('h3', null, q.title),
     q.description ? h('div', { class: 'small muted' }, q.description) : null,
@@ -59,13 +58,13 @@ function filteredGrid(list, opts) {
     const items = list.filter((q) => (!st.subject || q.subject === st.subject) && (!needle || `${q.title} ${q.description}`.toLowerCase().includes(needle)));
     fill(grid, ...(items.length ? items.map((q) => quizCard(q, opts)) : [h('p', { class: 'muted' }, t('Ничего не найдено'))]));
     fill(chips, h('button', { class: `chip ${st.subject ? '' : 'on'}`, onClick: () => { st.subject = ''; draw(); } }, t('Все')),
-      ...subjects.map((k) => { const s = subj(k); return h('button', { class: `chip ${st.subject === k ? 'on' : ''}`, style: { color: s.color, background: `${s.color}18` }, onClick: () => { st.subject = k; draw(); } }, s.name); }));
+      ...subjects.map((k) => { const s = subj(k); return h('button', { class: `chip ${st.subject === k ? 'on' : ''}`, onClick: () => { st.subject = k; draw(); } }, h('i', { class: 'dot', style: { background: s.color } }), s.name); }));
   };
   draw();
   return h('div', { class: 'stack' },
     h('div', { class: 'row' }, h('div', { style: { position: 'relative', flex: '1', minWidth: '220px', maxWidth: '360px' } },
       h('input', { class: 'input', placeholder: t('Поиск по названию'), onInput: (e) => { st.q = e.target.value; draw(); }, style: { paddingLeft: '40px' } }),
-      h('span', { html: icon('search'), style: { position: 'absolute', left: '12px', top: '12px', width: '20px', color: 'var(--faint)' } }))),
+      h('span', { html: icon('search'), style: { position: 'absolute', left: '12px', top: '12px', width: '20px', color: 'var(--muted)' } }))),
     subjects.length > 1 ? chips : null, grid);
 }
 
@@ -73,26 +72,24 @@ function filteredGrid(list, opts) {
 export async function dashboard() {
   const [quizzes, games, live] = await Promise.all([api('/api/quizzes'), api('/api/games'), api('/api/games/live')]);
   const me = store.me;
-  const hour = new Date().getHours();
-  const hello = hour < 12 ? t('Қайырлы таң') : hour < 18 ? t('Сәлеметсіз бе') : t('Қайырлы кеш');
   const quick = (cls, ico, title, text, href) => h('button', { class: cls, onClick: () => go(href), 'data-tour': cls },
     h('span', { html: icon(ico), style: { display: 'contents' } }), h('b', null, t(title)), h('span', null, t(text)));
   const reached = games.reduce((s, g) => s + (g.mode === 'board' ? 0 : g.players), 0);
   const node = teacherPage('',
-    h('div', { class: 'page-head' }, h('div', null, h('h1', null, `${hello}, ${me.name.split(' ')[0]}!`),
-      h('div', { class: 'muted' }, fmtDate(Date.now(), false)))),
-    live.length ? h('div', { class: 'card', style: { background: 'var(--y100)', marginBottom: '18px' } }, live.map((g) => h('div', { class: 'row between' },
-      h('div', null, h('b', null, `${t('Идёт игра')}: ${g.title}`), h('div', { class: 'small muted' }, `PIN ${g.pin} · ${g.players} ${t('игроков')}`)),
+    h('div', { class: 'page-head' }, h('div', null, h('h1', null, t('Главная')),
+      h('div', { class: 'muted' }, `${me.name} · ${fmtDate(Date.now(), false)}`))),
+    live.length ? h('div', { class: 'card', style: { marginBottom: '16px' } }, live.map((g) => h('div', { class: 'row between' },
+      h('div', { class: 'row', style: { gap: '12px' } }, h('span', { class: 'ribbon' }), h('div', null, h('b', null, `${t('Идёт игра')}: ${g.title}`), h('div', { class: 'small muted' }, `PIN ${g.pin} · ${g.players} ${t('игроков')}`))),
       h('a', { class: 'btn primary sm', href: `#/host/${g.id}` }, t('Вернуться к игре'))))) : null,
-    !me.tour_done ? h('div', { class: 'card row between', style: { marginBottom: '18px', borderLeft: '5px solid var(--y600)' } },
+    !me.tour_done ? h('div', { class: 'card row between', style: { marginBottom: '16px' } },
       h('div', null, h('b', null, t('Впервые здесь?')), h('div', { class: 'muted small' }, t('Короткий тур покажет всё меню за минуту.'))),
-      h('button', { class: 'btn yellow sm', onClick: () => import('./guide.js').then((m) => m.startTour()) }, t('Начать тур'))) : null,
+      h('button', { class: 'btn sm', onClick: () => import('./guide.js').then((m) => m.startTour()) }, t('Начать тур'))) : null,
     h('div', { class: 'quick' },
       quick('q1', 'plus', 'Создать квиз', 'Свои вопросы, формулы, картинки', '#/t/edit/new'),
-      quick('q2', 'spark', 'ИИ-генератор', 'Вопросы по теме за минуту', '#/t/ai'),
+      quick('q2', 'msg', 'ИИ-генератор', 'Вопросы по теме за минуту', '#/t/ai'),
       quick('q3', 'rope', 'Канат на доске', 'Арқан тартыс без телефонов', '#/t/board'),
       quick('q4', 'book', 'Библиотека', 'Шаблоны и квизы коллег', '#/t/library')),
-    !games.length ? h('div', { style: { height: '18px' } }) : h('div', { class: 'card row', style: { margin: '18px 0', gap: '36px' } },
+    !games.length ? h('div', { style: { height: '18px' } }) : h('div', { class: 'card row', style: { margin: '16px 0', gap: '40px' } },
       h('div', { class: 'stat' }, h('b', null, quizzes.length), h('span', null, t('квизов'))),
       h('div', { class: 'stat' }, h('b', null, games.length), h('span', null, t('игр проведено'))),
       h('div', { class: 'stat' }, h('b', null, reached), h('span', null, t('участий учеников')))),
@@ -100,7 +97,7 @@ export async function dashboard() {
       h('div', { class: 'card' }, h('div', { class: 'row between' }, h('h3', null, t('Мои квизы')), h('a', { href: '#/t/quizzes', class: 'small' }, t('все →'))),
         quizzes.length ? quizzes.slice(0, 5).map((q) => h('div', { class: 'list-row' },
           h('span', { style: { width: '10px', height: '10px', borderRadius: '50%', background: subj(q.subject).color, flex: 'none' } }),
-          h('a', { href: `#/t/edit/${q.id}`, class: 'grow', style: { color: 'inherit', fontWeight: 800, textDecoration: 'none' } }, q.title),
+          h('a', { href: `#/t/edit/${q.id}`, class: 'grow', style: { color: 'inherit', fontWeight: 500, textDecoration: 'none' } }, q.title),
           h('span', { class: 'small muted' }, `${q.count}`),
           h('button', { class: 'btn primary sm icon', title: t('Запустить'), html: icon('play'), onClick: () => launchById(q.id) })))
           : h('p', { class: 'muted' }, t('Пока пусто. Создайте первый квиз или возьмите шаблон из библиотеки.'))),
@@ -112,12 +109,12 @@ export async function dashboard() {
 const winnerText = (g) => {
   if (!g.winner) return '';
   if (g.winner === 'draw') return t('ничья');
-  return `🏆 ${g.teams?.[g.winner]?.name || g.winner}`;
+  return `${t('победа')}: ${g.teams?.[g.winner]?.name || g.winner}`;
 };
 const gameRow = (g) => h('a', { class: 'list-row', href: `#/t/report/${g.id}`, style: { color: 'inherit', textDecoration: 'none' } },
-  h('span', { html: icon(g.mode === 'board' ? 'monitor' : g.mode === 'solo' ? 'trophy' : g.mode === 'duel' ? 'swap' : 'rope'), style: { width: '22px', color: 'var(--g600)', flex: 'none' } }),
+  h('span', { html: icon(g.mode === 'board' ? 'monitor' : g.mode === 'solo' ? 'trophy' : g.mode === 'duel' ? 'swap' : 'rope'), style: { width: '22px', color: 'var(--muted)', flex: 'none' } }),
   h('div', { class: 'grow' }, h('b', null, g.title), h('div', { class: 'small muted' }, `${fmtDate(g.finished)} · ${t(MODE_NAMES[g.mode])}${g.mode !== 'board' ? ` · ${g.players} ${t('игроков')}` : ''}`)),
-  h('span', { class: 'small', style: { fontWeight: 800 } }, winnerText(g)));
+  h('span', { class: 'small', style: { fontWeight: 500 } }, winnerText(g)));
 
 // ---------- мои квизы и библиотека ----------
 export async function quizzes() {
@@ -236,8 +233,8 @@ export async function admin() {
         h('p', { class: 'small muted' }, t('Учитель вводит этот код при регистрации. Смените его, если код попал к ученикам.')),
         h('div', { class: 'row' }, h('div', { class: 'grow' }, invite), h('button', { class: 'btn icon', html: icon('copy'), title: t('Копировать'), onClick: () => copyText(invite.value) })),
         h('button', { class: 'btn primary', onClick: async () => { try { await api('/api/admin/settings', { method: 'PUT', body: { invite_code: invite.value } }); toast(t('Сохранено')); } catch (e) { toastErr(e); } } }, t('Сохранить код'))),
-      h('div', { class: 'card stack' }, h('h3', null, ic('spark'), ' ', t('ИИ для генерации вопросов')),
-        h('p', { class: 'small muted' }, conf.ai.hasKey ? `✅ ${t('ИИ подключён. Учителя могут генерировать вопросы одной кнопкой.')}`
+      h('div', { class: 'card stack' }, h('h3', null, t('ИИ для генерации вопросов')),
+        h('p', { class: 'small muted' }, conf.ai.hasKey ? t('ИИ подключён. Учителя могут генерировать вопросы одной кнопкой.')
           : t('Без ключа учителя всё равно могут пользоваться ИИ через промт (копировать в любой чат). С бесплатным ключом Gemini или Groq — одной кнопкой.')),
         field('Сервис', provider), field('Ключ API', key, keyLink),
         h('details', null, h('summary', { class: 'small muted', style: { cursor: 'pointer' } }, t('Адрес и модель (для опытных)')),

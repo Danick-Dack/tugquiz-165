@@ -156,8 +156,8 @@ function questionCard(quiz, i, redraw, markDirty) {
       h('div', { class: 'num' }, i + 1),
       h('div', { class: 'seg' }, TYPES.map(([k, l]) => h('button', { type: 'button', class: q.type === k ? 'on' : '', onClick: () => changeType(k) }, t(l)))),
       h('select', { class: 'input', style: { width: 'auto', padding: '7px 10px' }, title: t('Время на ответ'), onChange: (e) => set({ time: Number(e.target.value) }) },
-        [...new Set([...TIMES, q.time])].sort((a, b) => a - b).map((s) => h('option', { value: s, selected: s === q.time }, `⏱ ${s} ${t('с')}`))),
-      h('button', { type: 'button', class: `btn sm ${q.double ? 'yellow' : ''}`, title: t('Двойные очки'), onClick: () => set({ double: !q.double }, true) }, ic('zap'), '×2'),
+        [...new Set([...TIMES, q.time])].sort((a, b) => a - b).map((s) => h('option', { value: s, selected: s === q.time }, `${s} ${t('с')}`))),
+      h('button', { type: 'button', class: `btn sm ${q.double ? 'primary' : ''}`, title: t('Двойные очки'), onClick: () => set({ double: !q.double }, true) }, ic('zap'), '×2'),
       h('div', { class: 'grow' }),
       i > 0 ? h('button', { type: 'button', class: 'btn sm icon ghost', title: t('Выше'), html: icon('up'), onClick: () => move(-1) }) : null,
       i < quiz.questions.length - 1 ? h('button', { type: 'button', class: 'btn sm icon ghost', title: t('Ниже'), html: icon('down'), onClick: () => move(1) }) : null,
@@ -173,7 +173,7 @@ function questionCard(quiz, i, redraw, markDirty) {
       q.video ? h('div', { class: 'row' }, h('span', { class: 'chip' }, ic('video', { style: { width: '14px' } }), q.video.length > 40 ? `${q.video.slice(0, 40)}…` : q.video), h('button', { type: 'button', class: 'btn sm', onClick: () => set({ video: '' }, true) }, ic('x'), t('Убрать видео')))
         : h('button', { type: 'button', class: 'btn sm', onClick: () => mediaDialog('video', (url) => set({ video: url }, true)) }, ic('video'), t('Видео'))),
     answersArea(),
-    h('details', { open: Boolean(q.explain) }, h('summary', { class: 'small muted', style: { cursor: 'pointer', fontWeight: 800 } }, t('Пояснение после ответа (необязательно)')),
+    h('details', { open: Boolean(q.explain) }, h('summary', { class: 'small muted', style: { cursor: 'pointer', fontWeight: 500 } }, t('Пояснение после ответа (необязательно)')),
       h('input', { class: 'input', style: { marginTop: '8px' }, value: q.explain || '', placeholder: t('Почему этот ответ правильный'), onInput: (e) => { q.explain = e.target.value; markDirty(); } })));
 }
 
@@ -199,8 +199,8 @@ export async function editor(id) {
       h('div', { style: { maxHeight: '260px', overflow: 'auto' } }, quiz.questions.map((q, i) => h('a', {
         href: `#q${i}`, class: 'list-row', style: { color: 'inherit', textDecoration: 'none', padding: '6px 2px' },
         onClick: (e) => { e.preventDefault(); document.getElementById(`q${i}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' }); },
-      }, h('b', { style: { color: 'var(--g600)', width: '24px' } }, i + 1), h('span', { class: 'small grow', style: { overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' } }, q.text.replace(/[$*_]/g, '') || t('(без текста)'))))),
-      dirty ? h('div', { class: 'chip', style: { background: 'var(--y100)', color: '#7a6a00' } }, t('есть несохранённые изменения')) : null);
+      }, h('b', { style: { color: 'var(--muted)', width: '24px' } }, i + 1), h('span', { class: 'small grow', style: { overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' } }, q.text.replace(/[$*_]/g, '') || t('(без текста)'))))),
+      dirty ? h('div', { class: 'chip' }, t('есть несохранённые изменения')) : null);
   }
 
   const save = async () => {
@@ -261,7 +261,7 @@ export function previewQuiz(quiz) {
     fill(box, h('div', { class: 'stack' },
       h('div', { class: 'row', style: { gap: '28px' } }, h('div', { class: 'stat' }, h('b', null, quiz.questions.length), h('span', null, t('вопросов'))),
         h('div', { class: 'stat' }, h('b', null, fmtDur(total)), h('span', null, t('общее время')))),
-      h('div', { style: { maxHeight: '45vh', overflow: 'auto' } }, quiz.questions.map((q, k) => h('div', { class: 'list-row' }, h('b', { style: { width: '24px', color: 'var(--g600)' } }, k + 1),
+      h('div', { style: { maxHeight: '45vh', overflow: 'auto' } }, quiz.questions.map((q, k) => h('div', { class: 'list-row' }, h('b', { style: { width: '24px', color: 'var(--muted)' } }, k + 1),
         h('div', { class: 'grow rich small', html: rich(q.text) }), h('span', { class: 'chip' }, `${t(TYPES.find(([x]) => x === q.type)[1])} · ${q.time} ${t('с')}`)))),
       h('button', { class: 'btn primary big', onClick: () => show(0) }, ic('play'), t('Пройти как ученик'))));
   };
@@ -275,7 +275,7 @@ export function previewQuiz(quiz) {
     const right = q.type === 'choice' ? q.options[q.correct].text : q.type === 'truefalse' ? (q.correct ? t('Верно') : t('Неверно')) : q.answers.join(' / ') || t('оценивает учитель');
     fill(area, h('div', { class: 'card center', style: { background: ok ? 'var(--ok-s)' : 'var(--bad-s)' } },
       h('div', { class: 'big-mark', style: { color: ok ? 'var(--ok)' : 'var(--bad)', fontSize: '3rem' } }, ok ? '✓' : '✗'),
-      h('div', null, value === undefined ? t('Время вышло') : ok ? `${t('Верно!')} ${left > 0 ? `· ${t('осталось')} ${left} ${t('с')}` : ''}` : t('Неверно')),
+      h('div', null, value === undefined ? t('Время вышло') : ok ? `${t('Верно')} ${left > 0 ? `· ${t('осталось')} ${left} ${t('с')}` : ''}` : t('Неверно')),
       h('div', { class: 'rich', style: { marginTop: '6px' } }, t('Правильный ответ:'), ' ', h('b', { html: rich(right) })),
       q.explain ? h('div', { class: 'small muted rich', style: { marginTop: '6px' }, html: rich(q.explain) }) : null));
   };

@@ -24,10 +24,10 @@ export function optionsEl(q, reveal) {
 }
 
 export const leaderboard = (players, n = 5, from = 0) => h('div', { class: 'board-lb' },
-  h('h3', null, `🏆 ${t('Лидеры')}`),
-  players.slice(0, n).map((p, i) => h('div', { class: 'lb-row', style: { background: i === 0 ? 'rgba(246,226,26,.15)' : 'transparent' } },
+  h('h3', null, t('Лидеры')),
+  players.slice(0, n).map((p, i) => h('div', { class: 'lb-row', style: { background: i === 0 ? 'var(--d-raised)' : 'transparent' } },
     h('span', { class: 'pos' }, i + 1 + from), h('span', { class: p.team ? `t${p.team}` : '' }, p.name),
-    p.streak >= 3 ? h('span', { title: t('Серия') }, `🔥${p.streak}`) : null, h('span', { class: 'sc' }, p.score))));
+    p.streak >= 3 ? h('span', { class: 'streak', title: t('Серия') }, ic('flame'), p.streak) : null, h('span', { class: 'sc' }, p.score))));
 
 function timerEl() {
   const C = 2 * Math.PI * 42;
@@ -72,7 +72,7 @@ export function host(id) {
     onStatus: (ok) => { if (!ok) bar.dataset.off = '1'; else delete bar.dataset.off; drawBar(); },
     onMessage: (m) => {
       if (m.t === 'error') {
-        fill(body, h('div', { class: 'winner' }, h('h2', null, t('Игра не найдена или уже завершена')), h('a', { class: 'btn yellow', href: '#/t' }, t('В кабинет'))));
+        fill(body, h('div', { class: 'winner' }, h('h2', null, t('Игра не найдена или уже завершена')), h('a', { class: 'btn primary', href: '#/t' }, t('В кабинет'))));
         return;
       }
       if (m.t !== 'state') return;
@@ -96,11 +96,11 @@ export function host(id) {
     if (!s) return;
     fill(bar, 
       h('img', { src: '/img/icon-192.png', alt: '' }),
-      h('div', null, h('div', { class: 'ttl' }, s.title), h('div', { class: 'small', style: { color: '#9fd0b0' } }, `${t(MODE_NAMES[s.mode])} · ${subj(s.subject).name}`)),
+      h('div', null, h('div', { class: 'ttl' }, s.title), h('div', { class: 'small', style: { color: 'var(--d-sub)' } }, `${t(MODE_NAMES[s.mode])} · ${subj(s.subject).name}`)),
       h('div', { class: 'grow' }),
-      bar.dataset.off ? h('span', { class: 'chip', style: { background: 'var(--bad)', color: '#fff' } }, t('нет связи…')) : null,
-      s.phase !== 'lobby' ? h('span', { class: 'chip', style: { background: 'rgba(255,255,255,.12)', color: '#fff' } }, `PIN ${s.pin}`) : null,
-      h('span', { class: 'chip', style: { background: 'rgba(255,255,255,.12)', color: '#fff' } }, ic('users', { style: { width: '14px' } }), s.players.length),
+      bar.dataset.off ? h('span', { class: 'chip', style: { color: '#ff8a8a' } }, t('нет связи…')) : null,
+      s.phase !== 'lobby' ? h('span', { class: 'chip' }, `PIN ${s.pin}`) : null,
+      h('span', { class: 'chip' }, ic('users', { style: { width: '14px' } }), s.players.length),
       h('button', { class: 'btn icon', title: t('Звук'), html: icon(sound.on ? 'vol' : 'mute'), onClick: () => { sound.on = !sound.on; drawBar(); } }),
       h('button', { class: 'btn icon', title: t('Во весь экран'), html: icon('max'), onClick: fullscreen }),
       s.phase !== 'final' && s.phase !== 'lobby' ? h('button', { class: 'btn sm', onClick: async () => { if (await ask(t('Завершить игру сейчас и показать итоги?'))) cmd('finish'); } }, t('Завершить')) : null,
@@ -123,19 +123,21 @@ export function host(id) {
     lobby(st) {
       const url = `${location.origin}/#/join/${st.pin}`;
       const teamsBox = h('div');
-      const start = h('button', { class: 'btn yellow big', onClick: () => cmd('start') });
+      const start = h('button', { class: 'btn primary big', onClick: () => cmd('start') });
+      const mix = st.teams ? h('button', { class: 'btn', onClick: () => cmd('shuffleTeams') }, ic('shuffle'), t('Перемешать команды')) : null;
       const el = h('div', { class: 'stack' }, h('div', { class: 'lobby' },
         h('div', { class: 'qr' }, h('img', { src: `/api/qr?text=${encodeURIComponent(url)}`, alt: 'QR' })),
         h('div', { class: 'stack' },
-          h('div', { style: { fontSize: '1.3rem', fontWeight: 800 } }, t('Откройте'), ' ', h('span', { style: { color: 'var(--y)' } }, location.host), ' ', t('и введите PIN:')),
+          h('div', { style: { fontSize: '20px', color: 'var(--d-sub)' } }, t('Откройте'), ' ', h('span', { style: { color: 'var(--d-ink)' } }, location.host), ' ', t('и введите PIN:')),
           h('div', { class: 'pin-big' }, st.pin.replace(/(\d{3})(\d{3})/, '$1 $2')),
           teamsBox,
-          h('div', { class: 'row' }, st.teams ? h('button', { class: 'btn', onClick: () => cmd('shuffleTeams') }, ic('shuffle'), t('Перемешать команды')) : null, start))),
+          h('div', { class: 'row' }, mix, start))),
       tug ? tugBlock() : null);
       return { el, update(x) {
         start.disabled = !x.players.length;
+        mix?.classList.toggle('hidden', x.players.length < 2);
         fill(start, h('span', { html: icon('play'), style: { display: 'contents' } }), `${t('Начать игру')} · ${x.players.length}`);
-        if (!x.players.length) return fill(teamsBox, h('div', { class: 'wait-dots', style: { fontSize: '1.2rem', opacity: 0.8 } }, t('Ждём учеников')));
+        if (!x.players.length) return fill(teamsBox, h('div', { class: 'wait-dots', style: { fontSize: '18px', color: 'var(--d-sub)' } }, t('Ждём учеников')));
         fill(teamsBox, x.teams
           ? h('div', { class: 'teams-cols' }, ['A', 'B'].map((tm) => {
             const list = x.players.filter((p) => p.team === tm);
@@ -148,16 +150,16 @@ export function host(id) {
     question(st) {
       const q = st.question;
       const timer = timerEl();
-      const answered = h('b', { style: { fontFamily: 'var(--display)', fontSize: '1.8rem' } });
+      const answered = h('b', { style: { fontSize: '28px', fontWeight: 600 } });
       const sb = st.mode === 'duel' ? scoreBar(st) : null;
       const el = h('div', { class: 'stack' },
         h('div', { class: 'row between' },
-          h('div', { class: 'row' }, h('span', { class: 'chip', style: { background: 'var(--y)', color: 'var(--g900)', fontSize: '1rem' } }, `${t('Вопрос')} ${st.qi + 1} / ${st.total}`),
-            q.double ? h('span', { class: 'chip', style: { background: '#fff', color: 'var(--g900)' } }, `⚡ ×2 ${t('очки')}`) : null),
+          h('div', { class: 'row' }, h('span', { class: 'chip' }, h('span', { class: 'ribbon' }), `${t('Вопрос')} ${st.qi + 1} / ${st.total}`),
+            q.double ? h('span', { class: 'chip' }, ic('zap', { style: { width: '14px' } }), `×2 ${t('очки')}`) : null),
           h('div', { class: 'row' }, h('div', { style: { textAlign: 'right' } }, answered, h('div', { class: 'small' }, t('ответили'))), timer.el)),
         st.mode === 'duel' ? h('div', { class: `turn bg${st.activeTeam}` }, `${t('Отвечает команда')} «${st.teams[st.activeTeam].name}»`) : null,
         h('div', { class: 'qbox' }, questionEl(q)),
-        optionsEl(q) || h('div', { class: 'center', style: { fontSize: '1.4rem', fontWeight: 800 } }, ic('phone', { style: { width: '26px', verticalAlign: 'middle' } }), ' ', t('Введите ответ на телефоне')),
+        optionsEl(q) || h('div', { class: 'center', style: { fontSize: '20px', color: 'var(--d-sub)' } }, ic('phone', { style: { width: '20px', verticalAlign: 'middle' } }), ' ', t('Введите ответ на телефоне')),
         tug ? tugBlock() : sb?.el,
         h('div', { class: 'row end' }, h('button', { class: 'btn', onClick: () => cmd('next') }, ic('skip'), t('Завершить вопрос'))));
       return { el, timer, update(x) {
@@ -172,9 +174,9 @@ export function host(id) {
       const el = h('div', { class: 'stack' },
         h('div', { class: 'qbox' }, questionEl(st.question)),
         h('h2', null, t('Оцените ответы')),
-        st.accepted?.length ? h('div', null, t('Ожидаемые ответы:'), ' ', h('b', { style: { color: 'var(--y)' } }, st.accepted.join(' / '))) : null,
+        st.accepted?.length ? h('div', { style: { color: 'var(--d-sub)' } }, t('Ожидаемые ответы:'), ' ', h('b', { style: { color: 'var(--d-ink)' } }, st.accepted.join(' / '))) : null,
         list,
-        h('div', { class: 'row end' }, h('button', { class: 'btn yellow big', onClick: () => cmd('gradeDone') }, ic('check'), t('Готово — показать результаты'))));
+        h('div', { class: 'row end' }, h('button', { class: 'btn primary big', onClick: () => cmd('gradeDone') }, ic('check'), t('Готово — показать результаты'))));
       return { el, update(x) {
         fill(list, ...x.grading.map((g) => h('div', { class: 'grade-item' },
           h('span', { class: 'n' }, `×${g.count}`), h('span', { class: 'grow' }, g.text),
@@ -190,17 +192,17 @@ export function host(id) {
       if (tug) tug.set(st.rope);
       const last = st.qi + 1 >= st.total || st.winner;
       const el = h('div', { class: 'stack' },
-        h('div', { class: 'row between' }, h('span', { class: 'chip', style: { background: 'var(--y)', color: 'var(--g900)', fontSize: '1rem' } }, `${t('Вопрос')} ${st.qi + 1} / ${st.total}`),
-          h('div', { style: { fontFamily: 'var(--display)', fontSize: '1.3rem' } }, `✓ ${r.right} / ${r.answered}`)),
-        st.winner && st.mode === 'tug' ? h('div', { class: 'winner' }, h('h1', null, `🏆 ${st.teams[st.winner].name}!`), h('div', null, t('Канат перетянут до конца!'))) : null,
+        h('div', { class: 'row between' }, h('span', { class: 'chip' }, h('span', { class: 'ribbon' }), `${t('Вопрос')} ${st.qi + 1} / ${st.total}`),
+          h('div', { style: { fontSize: '20px', fontWeight: 600 } }, `${t('Верно')}: ${r.right} / ${r.answered}`)),
+        st.winner && st.mode === 'tug' ? h('div', { class: 'winner' }, h('span', { class: 'ribbon' }), h('h1', null, st.teams[st.winner].name), h('div', { style: { color: 'var(--d-sub)' } }, t('Канат перетянут до конца'))) : null,
         h('div', { style: { display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(220px, 300px)', gap: '16px', alignItems: 'start' } },
           h('div', { class: 'stack' },
             h('div', { class: 'qbox' }, questionEl(q)),
-            optionsEl(q, r) || h('div', { class: 'qbox', style: { background: 'var(--y)' } }, h('div', { class: 'small' }, t('Правильный ответ')), h('div', { class: 'rich', style: { fontSize: '2rem', fontWeight: 900 }, html: rich(r.correctText) })),
-            r.explain ? h('div', { class: 'rich', style: { fontSize: '1.15rem', opacity: 0.9 }, html: `💡 ${rich(r.explain)}` }) : null),
+            optionsEl(q, r) || h('div', { class: 'qbox' }, h('div', { class: 'small muted' }, t('Правильный ответ')), h('div', { class: 'rich', style: { fontSize: '2rem', fontWeight: 600 }, html: rich(r.correctText) })),
+            r.explain ? h('div', { class: 'rich', style: { fontSize: '18px', color: 'var(--d-sub)' }, html: rich(r.explain) }) : null),
           leaderboard(st.players)),
         tug ? tugBlock() : st.mode === 'duel' ? scoreBar(st).el : null,
-        h('div', { class: 'row end' }, h('button', { class: 'btn yellow big', onClick: () => cmd('next') }, last ? t('Итоги') : t('Дальше'), ic('right'))));
+        h('div', { class: 'row end' }, h('button', { class: 'btn primary big', onClick: () => cmd('next') }, last ? t('Итоги') : t('Дальше'), ic('right'))));
       return { el };
     },
 
@@ -213,24 +215,24 @@ export function host(id) {
       if (teams) {
         if (tug) setTimeout(() => tug.win(sm.winner), 400);
         top = h('div', { class: 'stack' },
-          h('div', { class: 'winner' }, h('div', { style: { fontSize: '1.2rem' } }, t('Итог игры')),
-            h('h1', null, sm.winner === 'draw' ? t('Ничья!') : `🏆 ${teams[sm.winner].name}`)),
+          h('div', { class: 'winner' }, sm.winner === 'draw' ? null : h('span', { class: 'ribbon' }), h('div', { style: { fontSize: '18px', color: 'var(--d-sub)' } }, t('Итог игры')),
+            h('h1', null, sm.winner === 'draw' ? t('Ничья') : teams[sm.winner].name)),
           tug ? tugBlock() : null,
           h('div', { class: 'teams-cols' }, ['A', 'B'].map((tm) => h('div', { class: `team-col ${tm}`, style: { minHeight: 0 } },
-            h('h3', null, h('span', null, teams[tm].name), h('span', null, sm.winner === tm ? '🏆' : '')),
+            h('h3', null, h('span', null, teams[tm].name), sm.winner === tm ? h('span', { class: 'ribbon' }) : h('span')),
             h('div', { class: 'row', style: { gap: '24px' } },
               [[st.mode === 'tug' ? t('очков') : t('очков команды'), teams[tm].score], [t('верных'), teams[tm].correct], [t('ср. время'), teams[tm].avgTime ? `${teams[tm].avgTime} ${t('с')}` : '—'], [t('игроков'), teams[tm].players]]
-                .map(([label, v]) => h('div', { class: 'stat' }, h('b', { style: { color: '#fff' } }, v), h('span', { style: { color: '#cfe6d6' } }, label))))))),
+                .map(([label, v]) => h('div', { class: 'stat' }, h('b', { style: { color: 'var(--d-ink)' } }, v), h('span', { style: { color: 'var(--d-sub)' } }, label))))))),
           leaderboard(st.players, 5));
       } else {
         const [p1, p2, p3] = sm.players;
-        const col = (p, n) => (p ? h('div', { class: `p${n}` }, h('div', { style: { fontWeight: 900, fontSize: '1.2rem', marginBottom: '6px' } }, p.name), h('div', { style: { marginBottom: '6px' } }, p.score), h('div', { class: 'col' }, n)) : h('div'));
+        const col = (p, n) => (p ? h('div', { class: `p${n}` }, h('div', { style: { fontWeight: 600, fontSize: '18px', marginBottom: '4px' } }, p.name), h('div', { style: { marginBottom: '8px', color: 'var(--d-sub)' } }, p.score), h('div', { class: 'col' }, n)) : h('div'));
         top = h('div', { class: 'stack' }, h('div', { class: 'winner' }, h('h1', null, t('Итоги'))),
           h('div', { class: 'podium' }, col(p2, 2), col(p1, 1), col(p3, 3)), sm.players.length > 3 ? leaderboard(st.players.slice(3), 7, 3) : null);
       }
       const el = h('div', { class: 'stack' }, top,
         h('div', { class: 'row', style: { justifyContent: 'center' } },
-          h('a', { class: 'btn yellow big', href: `#/t/report/${st.id}` }, ic('chart'), t('Подробный отчёт')),
+          h('a', { class: 'btn primary big', href: `#/t/report/${st.id}` }, ic('chart'), t('Подробный отчёт')),
           h('a', { class: 'btn big', href: '#/t' }, t('В кабинет'))));
       return { el };
     },
@@ -245,7 +247,7 @@ export function host(id) {
       if (leadin.dataset.n !== String(n)) {
         leadin.dataset.n = n;
         sound.tick();
-        fill(leadin, h('div', null, h('div', { style: { fontSize: '1.6rem', fontWeight: 800 } }, `${t('Вопрос')} ${s.qi + 1}`), h('b', null, n)));
+        fill(leadin, h('div', null, h('div', { style: { fontSize: '24px', fontWeight: 500, color: 'var(--d-sub)' } }, `${t('Вопрос')} ${s.qi + 1}`), h('b', null, n)));
       }
       view.timer.set(s.question.time, s.question.time);
       return;

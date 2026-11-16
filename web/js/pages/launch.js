@@ -31,18 +31,18 @@ export function launchDialog(quiz) {
     style: { borderColor: i ? 'var(--blue)' : 'var(--red)', flex: '1 1 160px', width: 'auto' }, onInput: (e) => { st.teamNames[i] = e.target.value; },
   })));
   const line = (label, control) => h('div', { class: 'row between' }, h('b', null, t(label)), control);
-  const section = (title, ...c) => h('div', { class: 'stack' }, h('div', { class: 'small muted', style: { fontWeight: 800, textTransform: 'none' } }, t(title)), c);
+  const section = (title, ...c) => h('div', { class: 'stack' }, h('div', { class: 'small muted', style: { fontWeight: 500 } }, t(title)), c);
 
   function draw() {
     fill(cards, MODES.map(([key, ico, title, text]) => h('button', {
       type: 'button', class: 'mode-card', onClick: () => { st.mode = key; draw(); },
-      style: { textAlign: 'left', cursor: 'pointer', border: 0, padding: '14px', outline: st.mode === key ? '3px solid var(--g500)' : '1px solid var(--line)',
-        background: st.mode === key ? 'var(--g50)' : '#fff', borderTop: 0 },
+      style: { textAlign: 'left', cursor: 'pointer', padding: '16px', borderColor: st.mode === key ? 'var(--ink)' : 'var(--line)',
+        boxShadow: st.mode === key ? 'inset 0 0 0 1px var(--ink)' : 'none', background: 'var(--card)' },
     }, h('h3', { style: { fontSize: '.95rem', margin: '0 0 4px' } }, h('span', { html: icon(ico), style: { display: 'contents' } }), t(title)),
     h('div', { class: 'muted small' }, t(text)))));
     const m = st.mode;
     const more = h('details', { open: st.more, onToggle: (e) => { st.more = e.target.open; } },
-      h('summary', { style: { cursor: 'pointer', fontWeight: 800, color: 'var(--g700)' } }, t('Дополнительно')),
+      h('summary', { style: { cursor: 'pointer', fontWeight: 500, color: 'var(--sub)' } }, t('Дополнительно')),
       h('div', { class: 'stack', style: { marginTop: '12px' } },
         line('Время на вопрос', seg([0.75, 1, 1.5, 2], 'timeScale', (v) => `×${v}`)),
         quiz.questions.length > 5 ? line('Сколько вопросов', seg([0, 5, 10, 15, 20].filter((n) => n < quiz.questions.length), 'limit', (v) => (v || t('все')))) : null,
