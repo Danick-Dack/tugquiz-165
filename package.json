@@ -1,0 +1,20 @@
+{
+  "name": "tugquiz-165",
+  "version": "1.0.0",
+  "description": "TugQuiz · SL165 — квизы и «Арқан тартыс» для лицея №165",
+  "private": true,
+  "type": "module",
+  "main": "server/index.js",
+  "engines": { "node": ">=22.13" },
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "node --watch server/index.js",
+    "test": "node --test test/"
+  },
+  "author": "Daniyar",
+  "license": "UNLICENSED",
+  "dependencies": {
+    "qrcode": "^1.5.4",
+    "ws": "^8.23.0"
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "name": "TugQuiz · SL165",
+  "short_name": "TugQuiz",
+  "description": "Квизы и «Арқан тартыс» лицея №165",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#06321b",
+  "theme_color": "#0a4a28",
+  "icons": [{ "src": "/img/icon-192.png", "sizes": "192x192", "type": "image/png" }]
+}
