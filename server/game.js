@@ -386,6 +386,7 @@ setInterval(() => {
 
 export function attachSockets(server, userFromReq) {
   const wss = new WebSocketServer({ server, path: '/ws', maxPayload: 16 * 1024 });
+  wss.on('error', () => {}); // ошибки порта обрабатывает HTTP-сервер (server/index.js)
   wss.on('connection', (ws, req) => {
     const user = userFromReq(req);
     let misses = 0;

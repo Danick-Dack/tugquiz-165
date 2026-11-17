@@ -4,6 +4,8 @@ import { createReadStream, createWriteStream, statSync } from 'node:fs';
 import { unlink, rename } from 'node:fs/promises';
 import { randomBytes } from 'node:crypto';
 import path from 'node:path';
+import os from 'node:os';
+import { exec } from 'node:child_process';
 import QRCode from 'qrcode';
 import * as db from './db.js';
 import { meta, CLASSES } from './constants.js';
@@ -21,8 +23,8 @@ const TYPES = {
   '.webm': 'video/webm', '.webmanifest': 'application/manifest+json', '.txt': 'text/plain; charset=utf-8',
 };
 const CSP = [
-  "default-src 'self'", "script-src 'self'", "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-  "font-src 'self' data: https://fonts.gstatic.com", "img-src 'self' data: blob: https:", "media-src 'self' blob: https:",
+  "default-src 'self'", "script-src 'self'", "style-src 'self' 'unsafe-inline'",
+  "font-src 'self' data:", "img-src 'self' data: blob: https:", "media-src 'self' blob: https:",
   'frame-src https://www.youtube-nocookie.com https://www.youtube.com https://player.vimeo.com', "connect-src 'self' ws: wss:",
   "object-src 'none'", "base-uri 'self'", "frame-ancestors 'self'",
 ].join('; ');
@@ -424,7 +426,26 @@ const server = http.createServer(async (req, res) => {
 });
 
 attachSockets(server, userFromReq);
-server.listen(PORT, process.env.HOST || '0.0.0.0', () => {
-  console.log(`TugQuiz · SL165 запущен: http://localhost:${PORT}`);
-  console.log(`Код для регистрации учителей: ${db.getSetting('invite_code')}`);
+const lanAddresses = () => Object.values(os.networkInterfaces()).flat()
+  .filter((i) => i && i.family === 'IPv4' && !i.internal && !i.address.startsWith('169.254.')).map((i) => i.address);
+
+// Порт занят (например, старый запуск ещё работает) — пробуем следующие, а не падаем.
+let port = PORT;
+server.on('error', (e) => {
+  if (e.code === 'EADDRINUSE' && !process.env.PORT && port < PORT + 10) {
+    console.log(`Порт ${port} занят, пробую ${port + 1}…`);
+    return server.listen(++port, process.env.HOST || '0.0.0.0');
+  }
+  console.error(e.code === 'EADDRINUSE'
+    ? `Порт ${port} уже занят другой программой. Закройте её или задайте другой порт: PORT=3000 npm start`
+    : e);
+  process.exit(1);
 });
+server.on('listening', () => {
+  console.log('TugQuiz · SL165 запущен');
+  console.log(`  На этом компьютере:  http://localhost:${port}`);
+  for (const ip of lanAddresses()) console.log(`  С телефонов (Wi-Fi): http://${ip}:${port}`);
+  console.log(`Код для регистрации учителей: ${db.getSetting('invite_code')}`);
+  if (process.env.TQ_OPEN) exec(`start "" http://localhost:${port}`); // start.bat на Windows
+});
+server.listen(port, process.env.HOST || '0.0.0.0');

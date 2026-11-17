@@ -5,7 +5,9 @@
   "private": true,
   "type": "module",
   "main": "server/index.js",
-  "engines": { "node": ">=22.13" },
+  "engines": {
+    "node": ">=22.13"
+  },
   "scripts": {
     "start": "node server/index.js",
     "dev": "node --watch server/index.js",
@@ -16,5 +18,8 @@
   "dependencies": {
     "qrcode": "^1.5.4",
     "ws": "^8.23.0"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.2"
   }
 }

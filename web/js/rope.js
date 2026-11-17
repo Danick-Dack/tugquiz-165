@@ -46,8 +46,8 @@ const TEMPLATE = `
 <path d="M500 250 V306" stroke="#fff" stroke-width="4" stroke-dasharray="8 6" opacity=".9"/>
 <g><path d="M340 230 V306" stroke="#e5484d" stroke-width="5"/><path d="M340 230 l-26 8 l26 8 z" fill="#e5484d"/></g>
 <g><path d="M660 230 V306" stroke="#3d63dd" stroke-width="5"/><path d="M660 230 l26 8 l-26 8 z" fill="#3d63dd"/></g>
-<text class="nameA" x="24" y="40" font-family="Unbounded,sans-serif" font-weight="800" font-size="26" fill="#c8282d"></text>
-<text class="nameB" x="976" y="40" text-anchor="end" font-family="Unbounded,sans-serif" font-weight="800" font-size="26" fill="#2647ad"></text>
+<text class="nameA" x="24" y="40" font-family="Montserrat,Onest,sans-serif" font-weight="800" font-size="26" fill="#c8282d"></text>
+<text class="nameB" x="976" y="40" text-anchor="end" font-family="Montserrat,Onest,sans-serif" font-weight="800" font-size="26" fill="#2647ad"></text>
 <g class="shift">
   <g class="rope-line">
     <path d="M110 211 Q500 224 890 211" stroke="#8a5a1e" stroke-width="9" fill="none" stroke-linecap="round"/>
