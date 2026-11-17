@@ -132,29 +132,154 @@ export const pickFile = (accept) => new Promise((resolve) => {
 });
 
 // ---------- звуки (WebAudio, без файлов) ----------
+// Голоса: нота с плавным стартом и спадом (без щелчков), медь с вибрато, шум с фильтром (канат, аплодисменты).
+// Всё идёт через мягкий ограничитель, чтобы наложение нескольких звуков не хрипело.
+const ctxs = new WeakMap();
+function master(c, dest) {
+  if (!ctxs.has(c)) {
+    const lim = c.createWaveShaper();
+    const curve = new Float32Array(2049);
+    for (let i = 0; i < curve.length; i++) { const x = (i / 1024) - 1; curve[i] = Math.tanh(1.4 * x) / Math.tanh(1.4); }
+    lim.curve = curve;
+    lim.connect(dest);
+    ctxs.set(c, { in: lim, noise: null });
+  }
+  return ctxs.get(c);
+}
+
+export function voices(c, dest, t0 = c.currentTime) {
+  const m = master(c, dest);
+  const R = Math.random;
+  // hold — доля длительности, которую нота держится на полной громкости (для длинных нот меди); vib — вибрато в центах.
+  const note = (freq, { d = 0.15, type = 'sine', v = 0.15, at = 0, a = 0.006, glide = 1, lp = 0, lpFrom = 0, det = 0, hold = 0, vib = 0 } = {}) => {
+    const t = t0 + at;
+    const o = c.createOscillator(); const g = c.createGain();
+    o.type = type; o.detune.value = det; o.frequency.setValueAtTime(freq, t);
+    if (glide !== 1) o.frequency.exponentialRampToValueAtTime(Math.max(20, freq * glide), t + d);
+    g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(v, t + a);
+    if (hold) g.gain.setValueAtTime(v, t + d * hold);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + d);
+    let node = o;
+    if (lp) {
+      const f = c.createBiquadFilter(); f.type = 'lowpass'; f.Q.value = 0.8;
+      f.frequency.setValueAtTime(lpFrom || lp, t);
+      if (lpFrom) f.frequency.linearRampToValueAtTime(lp, t + Math.min(d, 0.12));
+      o.connect(f); node = f;
+    }
+    if (vib) {
+      const l = c.createOscillator(); const lg = c.createGain();
+      l.frequency.value = 5.5; lg.gain.setValueAtTime(0, t); lg.gain.linearRampToValueAtTime(vib, t + Math.min(0.35, d * 0.6));
+      l.connect(lg).connect(o.detune); l.start(t); l.stop(t + d + 0.05);
+    }
+    node.connect(g).connect(m.in);
+    o.start(t); o.stop(t + d + 0.05);
+  };
+  const noise = ({ d = 0.2, v = 0.2, at = 0, from = 800, to = 300, q = 1.2, a = 0.01 } = {}) => {
+    const t = t0 + at;
+    if (!m.noise) {
+      m.noise = c.createBuffer(1, c.sampleRate, c.sampleRate);
+      const data = m.noise.getChannelData(0);
+      for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
+    }
+    const s = c.createBufferSource(); s.buffer = m.noise; s.loop = true;
+    const f = c.createBiquadFilter(); f.type = 'bandpass'; f.Q.value = q;
+    f.frequency.setValueAtTime(from, t); f.frequency.exponentialRampToValueAtTime(to, t + d);
+    const g = c.createGain();
+    g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(v, t + a); g.gain.exponentialRampToValueAtTime(0.0001, t + d);
+    s.connect(f).connect(g).connect(m.in);
+    s.start(t, R()); s.stop(t + d + 0.05);
+  };
+  // колокольчик: основной тон и негармоничные обертоны
+  const bell = (f, at = 0, v = 0.14, d = 0.6) => {
+    note(f, { at, d, v, type: 'sine', a: 0.004 });
+    note(f * 2.76, { at, d: d * 0.45, v: v * 0.28, type: 'sine', a: 0.003 });
+    note(f * 4.07, { at, d: d * 0.2, v: v * 0.1, type: 'sine', a: 0.002 });
+  };
+  // труба или тромбон: две слегка расстроенные пилы, фильтр «раскрывается» в начале ноты, дыхание шумом
+  const brass = (f, { at = 0, d = 0.4, v = 0.12, bright = 2600, dark = 500, glide = 1, vib = 0, hold = 0.7 } = {}) => {
+    const p = { at, d, v, type: 'sawtooth', a: 0.035, lp: bright, lpFrom: dark, glide, vib, hold };
+    note(f, { ...p, det: -7 }); note(f, { ...p, det: 7, v: v * 0.9 });
+    note(f / 2, { ...p, type: 'triangle', v: v * 0.5, lp: bright * 0.5, lpFrom: dark });
+    noise({ at, d: 0.09, v: v * 0.25, from: 3000, to: 1500, q: 0.7 });
+  };
+  // аплодисменты: много коротких хлопков в «зале», громкость нарастает и спадает
+  const applause = (at, dur, v) => {
+    const n = Math.round(dur * 55);
+    for (let i = 0; i < n; i++) {
+      const x = R(); const env = Math.sin(Math.PI * Math.min(1, x * 1.15 + 0.02)) ** 0.8;
+      noise({ at: at + x * dur, d: 0.025 + R() * 0.035, v: v * env * (0.35 + R() * 0.65), from: 1800 + R() * 3200, to: 1200 + R() * 800, q: 0.7 + R() * 0.8, a: 0.002 });
+    }
+  };
+  return { note, noise, bell, brass, applause };
+}
+
+export const RECIPES = {
+  tick: (v) => v.note(1900, { d: 0.035, v: 0.12, a: 0.002 }),
+  count: (v) => { v.note(660, { d: 0.18, v: 0.3, type: 'triangle' }); v.note(1320, { d: 0.1, v: 0.08 }); },
+  go: (v) => {
+    v.note(523, { d: 0.16, v: 0.2, type: 'sawtooth', lp: 2200 });
+    v.note(784, { at: 0.11, d: 0.16, v: 0.2, type: 'sawtooth', lp: 2400 });
+    v.note(1047, { at: 0.22, d: 0.55, v: 0.24, type: 'sawtooth', lp: 2800 });
+    v.bell(2093, 0.22, 0.08, 0.5);
+  },
+  pop: (v) => v.note(420, { d: 0.09, v: 0.3, glide: 2.1, a: 0.003 }),
+  good: (v) => { v.bell(784, 0, 0.3, 0.45); v.bell(1175, 0.09, 0.3, 0.7); },
+  bad: (v) => {
+    v.note(196, { d: 0.32, v: 0.24, type: 'sawtooth', lp: 700, glide: 0.72 });
+    v.note(139, { d: 0.32, v: 0.2, type: 'sawtooth', lp: 600, glide: 0.72 });
+  },
+  pull: (v) => {
+    v.noise({ d: 0.28, v: 0.5, from: 900, to: 220, q: 0.9 });
+    v.note(110, { d: 0.24, v: 0.55, glide: 0.5, a: 0.004 });
+    v.note(310, { d: 0.18, v: 0.08, type: 'sawtooth', lp: 800, glide: 0.8, at: 0.02 });
+  },
+  // Победа: фанфара «та-та-та ТАААА» трубами, удар литавр, звон и овации зала.
+  win: (v) => {
+    [0, 0.17, 0.34].forEach((at) => v.brass(523, { at, d: 0.15, v: 0.16, hold: 0.5 }));
+    [523, 659, 784, 1047].forEach((f, i) => v.brass(f, { at: 0.52, d: 1.5, v: 0.13 - i * 0.012, vib: 14, hold: 0.8 }));
+    v.note(98, { at: 0.52, d: 0.9, v: 0.4, glide: 0.55, a: 0.004 });
+    v.noise({ at: 0.52, d: 0.3, v: 0.4, from: 400, to: 100, q: 0.6 });
+    [2093, 2637, 3136, 3951].forEach((f, i) => v.bell(f, 0.56 + i * 0.07, 0.09, 0.9));
+    v.applause(0.75, 2.6, 0.4);
+  },
+  // Поражение: «грустный тромбон» (четыре нисходящие ноты, последняя съезжает вниз) и один тихий вздох зала.
+  lose: (v) => {
+    v.brass(233, { at: 0, d: 0.42, v: 0.2, bright: 900, dark: 260, hold: 0.6 });
+    v.brass(220, { at: 0.46, d: 0.42, v: 0.2, bright: 880, dark: 260, hold: 0.6 });
+    v.brass(208, { at: 0.92, d: 0.42, v: 0.2, bright: 860, dark: 260, hold: 0.6 });
+    v.brass(196, { at: 1.38, d: 1.35, v: 0.22, bright: 820, dark: 240, glide: 0.8, vib: 22, hold: 0.55 });
+    v.noise({ at: 1.5, d: 1.0, v: 0.05, from: 700, to: 250, q: 0.5, a: 0.3 });
+  },
+  // Ничья: два ровных мягких звука и тёплый хлопок, ни радости, ни печали.
+  draw: (v) => {
+    v.brass(440, { at: 0, d: 0.35, v: 0.13, bright: 1500, dark: 500, hold: 0.6 });
+    v.brass(440, { at: 0.4, d: 0.7, v: 0.13, bright: 1500, dark: 500, hold: 0.6 });
+    v.bell(880, 0.4, 0.1, 0.8);
+    v.applause(0.5, 1.2, 0.2);
+  },
+  // Личный финал вне тройки лидеров: спокойные аплодисменты и два колокольчика.
+  finish: (v) => { v.bell(659, 0, 0.2, 0.6); v.bell(880, 0.14, 0.2, 0.8); v.applause(0.1, 1.4, 0.3); },
+};
+
 let actx;
+const audio = () => {
+  actx ||= new (window.AudioContext || window.webkitAudioContext)();
+  if (actx.state === 'suspended') actx.resume?.();
+  return actx;
+};
+// Браузеры включают звук только после касания страницы: «будим» движок при первом касании.
+try { window.addEventListener('pointerdown', () => { try { audio(); } catch { /* без звука */ } }, { once: true, capture: true }); } catch { /* не в браузере */ }
+
 export const sound = {
   get on() { try { return localStorage.getItem('tq_sound') !== '0'; } catch { return true; } },
   set on(v) { try { localStorage.setItem('tq_sound', v ? '1' : '0'); } catch { /* приватный режим */ } },
-  tone(freq, dur = 0.12, type = 'sine', vol = 0.15, delay = 0) {
+  play(name) {
     if (!this.on) return;
-    try {
-      actx ||= new AudioContext();
-      const o = actx.createOscillator();
-      const g = actx.createGain();
-      const at = actx.currentTime + delay;
-      o.type = type; o.frequency.setValueAtTime(freq, at);
-      g.gain.setValueAtTime(vol, at); g.gain.exponentialRampToValueAtTime(0.001, at + dur);
-      o.connect(g).connect(actx.destination); o.start(at); o.stop(at + dur + 0.02);
-    } catch { /* звук не обязателен */ }
+    try { const c = audio(); RECIPES[name](voices(c, c.destination)); } catch { /* звук не обязателен */ }
   },
-  tick() { this.tone(880, 0.05, 'square', 0.05); },
-  good() { this.tone(660, 0.1, 'triangle'); this.tone(990, 0.16, 'triangle', 0.15, 0.09); },
-  bad() { this.tone(200, 0.25, 'sawtooth', 0.08); },
-  pop() { this.tone(520, 0.07, 'sine', 0.1); },
-  pull() { this.tone(140, 0.18, 'triangle', 0.18); this.tone(90, 0.2, 'sine', 0.15, 0.05); },
-  win() { [523, 659, 784, 1046, 784, 1046].forEach((f, i) => this.tone(f, 0.22, 'triangle', 0.16, i * 0.13)); },
-  go() { this.tone(440, 0.12, 'square', 0.08); this.tone(880, 0.25, 'square', 0.08, 0.12); },
+  tick() { this.play('tick'); }, count() { this.play('count'); }, go() { this.play('go'); }, pop() { this.play('pop'); },
+  good() { this.play('good'); }, bad() { this.play('bad'); }, pull() { this.play('pull'); },
+  win() { this.play('win'); }, lose() { this.play('lose'); }, draw() { this.play('draw'); }, finish() { this.play('finish'); },
 };
 
 export function confetti(colors = ['#f6e21a', '#12773f', '#e5484d', '#3d63dd', '#fff']) {

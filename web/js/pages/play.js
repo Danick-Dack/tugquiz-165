@@ -149,6 +149,8 @@ export function play(pin) {
         const f = st.final;
         const teamWon = st.teams && st.winner && st.winner !== 'draw' && st.winner === st.me.team;
         if (teamWon || (!st.teams && st.me.rank <= 3)) { confetti(); sound.win(); }
+        else if (st.teams) (st.winner === 'draw' ? sound.draw() : sound.lose());
+        else sound.finish();
         if (tug) setTimeout(() => tug.win(st.winner), 300);
         return { el: h('div', { class: 'stack center' },
           st.teams ? h('div', { class: 'big-mark', html: icon(st.winner === 'draw' ? 'swap' : teamWon ? 'trophy' : 'users'), style: { color: teamWon ? 'var(--ribbon)' : 'var(--d-sub)' } }) : h('div', { class: 'big-mark text', style: { color: st.me.rank <= 3 ? 'var(--ribbon)' : 'var(--d-ink)' } }, `#${st.me.rank}`),

@@ -185,7 +185,7 @@ export function boardPlay() {
       }
       overlay.classList.remove('hidden');
       fill(overlay, h('div', null, h('div', { style: { fontSize: '24px', fontWeight: 500, color: 'var(--d-sub)' } }, 'Арқан тартыс'), h('b', null, n)));
-      sound.tick();
+      sound.count();
       n--;
       setTimeout(tick, 900);
     };
@@ -198,7 +198,7 @@ export function boardPlay() {
     const winner = byRope || (pos < 0 ? 'A' : pos > 0 ? 'B' : sides.A.correct === sides.B.correct ? 'draw' : sides.A.correct > sides.B.correct ? 'A' : 'B');
     for (const s of Object.values(sides)) { s.q = null; fill(s.panel, h('div', { class: 'tname' }, cfg.teamNames[s.team === 'A' ? 0 : 1]), stats(s)); }
     tug.win(winner);
-    sound.win();
+    if (winner === 'draw') sound.draw(); else sound.win();
     if (winner !== 'draw') confetti([winner === 'A' ? '#e5484d' : '#3d63dd', '#f6e21a', '#fff']);
     overlay.classList.remove('hidden');
     fill(overlay, h('div', { class: 'winner' },

@@ -208,8 +208,8 @@ export function host(id) {
 
     final(st) {
       const sm = st.summary;
-      sound.win();
-      confetti();
+      if (sm.winner === 'draw') sound.draw(); else sound.win();
+      if (sm.winner !== 'draw') confetti();
       const teams = sm.teams;
       let top;
       if (teams) {
@@ -246,7 +246,7 @@ export function host(id) {
       leadin.classList.remove('hidden');
       if (leadin.dataset.n !== String(n)) {
         leadin.dataset.n = n;
-        sound.tick();
+        sound.count();
         fill(leadin, h('div', null, h('div', { style: { fontSize: '24px', fontWeight: 500, color: 'var(--d-sub)' } }, `${t('Вопрос')} ${s.qi + 1}`), h('b', null, n)));
       }
       view.timer.set(s.question.time, s.question.time);
