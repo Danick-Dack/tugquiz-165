@@ -1,9 +1,7 @@
 #!/usr/bin/env bash
-# Обновление на сервере: забрать свежий код, поставить зависимости, перезапустить. Данные (база, файлы) не трогаются.
+# Обновление на сервере после того, как в /opt/tugquiz положили свежий код: зависимости, служба, Caddy.
+# Обычно не нужен: «Выложить на сервер.cmd» на компьютере делает всё сам. Данные (база, файлы) не трогаются.
 #   sudo bash deploy/update.sh
 set -euo pipefail
-cd "$(dirname "$0")/.."
-git pull --ff-only
-npm ci --omit=dev
-systemctl restart tugquiz
-echo "Обновлено. Логи: journalctl -u tugquiz -f"
+DOMAIN="$(head -1 /etc/caddy/Caddyfile 2>/dev/null | awk '{print $1}')"
+exec bash "$(dirname "$0")/install.sh" "$DOMAIN"
