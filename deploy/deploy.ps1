@@ -8,6 +8,8 @@ Set-Location (Split-Path $PSScriptRoot -Parent)
 
 if (-not $Server) { $Server = Read-Host 'Сервер в виде логин@IP (например root@185.1.2.3)' }
 if ($Server -notmatch '@') { $Server = "root@$Server" }
+if (-not $PSBoundParameters.ContainsKey('Domain')) { $Domain = (Read-Host 'Домен, например tugquiz.dedyn.io (Enter - без домена, адрес по IP)').Trim() }
+if ($Domain -and $Domain -notmatch '^[a-z0-9.-]+$') { throw "Странный домен: $Domain" }
 foreach ($tool in 'git', 'ssh', 'scp') {
   if (-not (Get-Command $tool -ErrorAction SilentlyContinue)) { throw "Не найден $tool. Установите Git для Windows / OpenSSH." }
 }
