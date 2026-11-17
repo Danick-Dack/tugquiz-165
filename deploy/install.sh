@@ -2,7 +2,8 @@
 # Установка и обновление TugQuiz на Ubuntu/Debian-сервере. Запуск из папки проекта (обычно /opt/tugquiz):
 #   sudo bash deploy/install.sh [домен]
 # Без домена берётся адрес вида 1-2-3-4.sslip.io: он сам указывает на IP сервера, регистрировать ничего не нужно.
-# Ставит Node.js 22 и Caddy (сам получает HTTPS-сертификат), создаёт службу systemd. Повторный запуск = обновление;
+# Ставит Node.js 22 и службу systemd. HTTPS: если на сервере уже работает nginx, встраивается в него (другие сайты
+# не трогаются) и берёт сертификат через certbot; иначе ставит Caddy. Повторный запуск = обновление;
 # данные (база, загрузки) лежат отдельно в /var/lib/tugquiz и не трогаются.
 set -euo pipefail
 
@@ -11,10 +12,11 @@ DATA_DIR=/var/lib/tugquiz
 
 if [ "$(id -u)" -ne 0 ]; then echo "Запустите через sudo"; exit 1; fi
 if ! command -v apt-get >/dev/null; then echo "Нужен Ubuntu или Debian (apt-get не найден)"; exit 1; fi
+export DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a
 
 echo "== Пакеты"
 apt-get update -y
-apt-get install -y curl ca-certificates gnupg debian-keyring debian-archive-keyring apt-transport-https
+apt-get install -y curl ca-certificates gnupg
 
 DOMAIN="${1:-}"
 if [ -z "$DOMAIN" ]; then
@@ -29,22 +31,26 @@ if ! command -v node >/dev/null || [ "$(node -p 'process.versions.node.split("."
   apt-get install -y nodejs
 fi
 
-# Порты 80 и 443 нужны Caddy. Если их держит другой веб-сервер, Caddy не запустится.
-BUSY="$(ss -ltnp 2>/dev/null | awk '$4 ~ /:(80|443)$/' | grep -v caddy || true)"
-if [ -n "$BUSY" ]; then
-  echo "Порты 80/443 заняты другой программой:"; echo "$BUSY"
-  echo "Остановите её (например: systemctl disable --now nginx apache2) и запустите установку снова."; exit 1
+# Кто держит порты 80/443: nginx (встроимся в него), Caddy (наш прежний) или кто-то чужой (остановка с пояснением).
+LISTEN="$(ss -ltnp 2>/dev/null | awk '$4 ~ /:(80|443)$/' || true)"
+if echo "$LISTEN" | grep -q nginx; then MODE=nginx
+elif [ -z "$(echo "$LISTEN" | grep -v caddy || true)" ]; then MODE=caddy
+else
+  echo "Порты 80/443 заняты программой, с которой установка не умеет работать:"; echo "$LISTEN"
+  echo "Если это apache, настройте обратный прокси на порт приложения вручную или освободите порты."; exit 1
 fi
+echo "== HTTPS через: $MODE"
 
-if ! command -v caddy >/dev/null; then
-  echo "== Caddy"
-  curl -1sLf https://dl.cloudsmith.io/public/caddy/stable/gpg.key | gpg --batch --yes --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
-  curl -1sLf https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt > /etc/apt/sources.list.d/caddy-stable.list
-  apt-get update -y
-  apt-get install -y caddy
-fi
+# Свободный локальный порт для приложения (на сервере могут быть другие службы).
+PORT=""
+for p in $(seq 8080 8120); do
+  if ! ss -ltn 2>/dev/null | awk '{print $4}' | grep -qE "[:.]$p$"; then PORT=$p; break; fi
+  # порт занят, но это наша же служба при обновлении
+  if systemctl is-active --quiet tugquiz 2>/dev/null && grep -q "PORT=$p " /etc/systemd/system/tugquiz.service 2>/dev/null; then PORT=$p; break; fi
+done
+[ -n "$PORT" ] || { echo "Не нашёл свободный порт в диапазоне 8080-8120"; exit 1; }
 
-echo "== Приложение"
+echo "== Приложение (порт $PORT)"
 id tugquiz >/dev/null 2>&1 || useradd --system --home "$DATA_DIR" --shell /usr/sbin/nologin tugquiz
 mkdir -p "$DATA_DIR"
 chown -R tugquiz:tugquiz "$DATA_DIR"
@@ -60,7 +66,7 @@ After=network.target
 [Service]
 User=tugquiz
 WorkingDirectory=$APP_DIR
-Environment=NODE_ENV=production PORT=8080 HOST=127.0.0.1 TQ_DATA=$DATA_DIR
+Environment=NODE_ENV=production PORT=$PORT HOST=127.0.0.1 TQ_DATA=$DATA_DIR
 ExecStart=$(command -v node) server/index.js
 Restart=always
 RestartSec=3
@@ -71,30 +77,76 @@ ReadWritePaths=$DATA_DIR
 [Install]
 WantedBy=multi-user.target
 EOF
+echo "$DOMAIN" > /etc/tugquiz.domain
+systemctl daemon-reload
+systemctl enable tugquiz >/dev/null 2>&1
+systemctl restart tugquiz
 
-cat > /etc/caddy/Caddyfile <<EOF
+echo "== Проверка приложения"
+for i in $(seq 1 15); do curl -fsS -o /dev/null "http://127.0.0.1:$PORT/" && break; sleep 1; done
+curl -fsS -o /dev/null "http://127.0.0.1:$PORT/" || { echo "Сайт не запустился. Логи:"; journalctl -u tugquiz -n 30 --no-pager; exit 1; }
+
+if [ "$MODE" = nginx ]; then
+  echo "== nginx + HTTPS (другие сайты не трогаются)"
+  apt-get install -y certbot python3-certbot-nginx
+  cat > /etc/nginx/sites-available/tugquiz <<EOF
+server {
+  listen 80;
+  listen [::]:80;
+  server_name $DOMAIN;
+  client_max_body_size 60m;
+  location / {
+    proxy_pass http://127.0.0.1:$PORT;
+    proxy_http_version 1.1;
+    proxy_set_header Host \$host;
+    proxy_set_header X-Real-IP \$remote_addr;
+    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto \$scheme;
+    proxy_set_header Upgrade \$http_upgrade;
+    proxy_set_header Connection \$connection_upgrade;
+    proxy_read_timeout 3600s;
+  }
+}
+EOF
+  # Переменная для WebSocket: объявляем один раз (если у сервера её ещё нет).
+  if ! grep -rqs 'connection_upgrade' /etc/nginx/nginx.conf /etc/nginx/conf.d /etc/nginx/sites-enabled; then
+    cat > /etc/nginx/conf.d/tugquiz-ws.conf <<'EOF'
+map $http_upgrade $connection_upgrade { default upgrade; '' close; }
+EOF
+  fi
+  ln -sf /etc/nginx/sites-available/tugquiz /etc/nginx/sites-enabled/tugquiz
+  nginx -t
+  systemctl reload nginx
+  if ! certbot --nginx -d "$DOMAIN" --non-interactive --agree-tos --register-unsafely-without-email --redirect; then
+    echo "Сертификат получить не удалось. Сайт пока доступен по http://$DOMAIN"
+    echo "Проверьте, что $DOMAIN указывает на этот сервер (nslookup $DOMAIN) и порт 80 открыт у хостера."
+  fi
+  nginx -t && systemctl reload nginx
+else
+  echo "== Caddy + HTTPS"
+  if ! command -v caddy >/dev/null; then
+    apt-get install -y debian-keyring debian-archive-keyring apt-transport-https
+    curl -1sLf https://dl.cloudsmith.io/public/caddy/stable/gpg.key | gpg --batch --yes --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
+    curl -1sLf https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt > /etc/apt/sources.list.d/caddy-stable.list
+    apt-get update -y
+    apt-get install -y caddy
+  fi
+  cat > /etc/caddy/Caddyfile <<EOF
 $DOMAIN {
   encode gzip
   request_body {
     max_size 60MB
   }
-  reverse_proxy 127.0.0.1:8080
+  reverse_proxy 127.0.0.1:$PORT
 }
 EOF
-
-if command -v ufw >/dev/null && ufw status | grep -q active; then ufw allow 80,443/tcp; fi
-
-systemctl daemon-reload
-systemctl enable tugquiz caddy >/dev/null 2>&1
-systemctl restart tugquiz
-systemctl restart caddy
-
-echo "== Проверка"
-for i in $(seq 1 15); do curl -fsS -o /dev/null http://127.0.0.1:8080/ && break; sleep 1; done
-curl -fsS -o /dev/null http://127.0.0.1:8080/ || { echo "Сайт не запустился. Логи:"; journalctl -u tugquiz -n 30 --no-pager; exit 1; }
+  if command -v ufw >/dev/null && ufw status | grep -q active; then ufw allow 80,443/tcp; fi
+  systemctl enable caddy >/dev/null 2>&1
+  systemctl restart caddy
+fi
 
 echo
 echo "Готово: https://$DOMAIN"
-echo "(первое открытие может занять до минуты, пока Caddy получает HTTPS-сертификат)"
+echo "(если сертификат ещё выпускается, подождите минуту)"
 echo "Код для регистрации учителей: $(journalctl -u tugquiz -n 50 --no-pager | grep -o 'SL165-[0-9]*' | tail -1)"
 echo "Первый зарегистрированный на сайте станет администратором."
