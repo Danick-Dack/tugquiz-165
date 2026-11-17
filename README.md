@@ -53,7 +53,7 @@ npm test             # автотесты
 2. Скрипт отправит последний коммит на сервер в `/opt/tugquiz`, поставит Node.js 22 и Caddy, получит HTTPS-сертификат и включит автозапуск. В конце он покажет адрес сайта: без своего домена это `https://185-1-2-3.sslip.io`.
 3. **Обновление:** закоммитьте изменения и снова запустите `Выложить на сервер.cmd`. База и загрузки лежат в `/var/lib/tugquiz` и не трогаются.
 
-Свой домен (например, с [duckdns.org](https://www.duckdns.org)): `powershell -ExecutionPolicy Bypass -File deploy\deploy.ps1 root@185.1.2.3 sl165quiz.duckdns.org`.
+Свой домен скрипт спросит при запуске. Бесплатный вариант без цифр — [deSEC](https://desec.io) (`tugquiz.dedyn.io`): создайте A-запись на IPv4 сервера, затем введите домен в скрипте.
 
 Логи: `journalctl -u tugquiz -f`.
 
