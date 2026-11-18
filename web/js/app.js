@@ -1,5 +1,5 @@
 // Точка входа: загрузка профиля, маршруты (#/...), общие шапка/подвал и меню учителя.
-import { h, fill, api, store, go, isTeacher, icon, ic, modal, toastErr } from './core.js';
+import { h, fill, api, store, go, isTeacher, icon, ic, modal, toastErr, DEV } from './core.js';
 import { t, lang, setLang } from './i18n.js';
 
 const app = document.getElementById('app');
@@ -24,7 +24,7 @@ function header() {
 
 export const footer = () => h('footer', { class: 'foot' }, h('div', { class: 'in' },
   h('div', null, h('b', null, '№165 мамандандырылған лицей'), h('div', null, t('Квизы и «Арқан тартыс» для уроков · основан в 1991 году'))),
-  h('div', { class: 'dev' }, 'Developed by Daniyar')));
+  h('div', { class: 'dev' }, DEV)));
 
 async function logout() {
   await api('/api/logout', { method: 'POST' }).catch(() => {});

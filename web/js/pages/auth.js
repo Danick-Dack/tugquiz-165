@@ -1,4 +1,4 @@
-import { h, api, store, go, isTeacher, toastErr } from '../core.js';
+import { h, api, store, go, isTeacher, toastErr, classPicker } from '../core.js';
 import { t } from '../i18n.js';
 import { page } from '../app.js';
 
@@ -42,8 +42,7 @@ export function register(role = 'student') {
   const lg = h('input', { class: 'input', autocomplete: 'username', required: true, pattern: '[A-Za-z0-9_.\\-]{3,32}', placeholder: 'aigul.s' });
   const pw = h('input', { class: 'input', type: 'password', autocomplete: 'new-password', required: true, minLength: 6 });
   const invite = h('input', { class: 'input', placeholder: 'SL165-0000' });
-  const cls = h('select', { class: 'input', required: true },
-    h('option', { value: '' }, t('— выберите —')), store.meta.classes.map((c) => h('option', { value: c }, c)));
+  const cls = classPicker();
   const submit = async (e) => {
     e.preventDefault();
     try {

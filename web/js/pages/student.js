@@ -1,5 +1,5 @@
 // Кабинет ученика: уровень, награды, история игр и рейтинг класса/лицея.
-import { h, fill, api, store, subjChip, fmtDate, pct, toast, toastErr, icon } from '../core.js';
+import { h, fill, api, store, subjChip, fmtDate, pct, toast, toastErr, icon, classPicker } from '../core.js';
 import { t } from '../i18n.js';
 import { page } from '../app.js';
 import { pinForm } from './home.js';
@@ -27,11 +27,11 @@ export async function cabinet() {
     h('b', { style: { width: '32px', color: 'var(--muted)', fontWeight: 500 } }, i + 1), h('span', { class: 'grow' }, u.name), h('span', { class: 'chip' }, u.class_name), h('b', null, `${u.xp} XP`)))
     : [h('p', { class: 'muted' }, t('Пока никого'))]));
   drawLb(mine);
-  const lbTabs = h('div', { class: 'seg' }, [[mine, `${t('Мой класс')} ${store.me.class_name}`], [school, t('Весь лицей')]].map(([list, label], i) =>
+  const lbTabs = h('div', { class: 'seg' }, [[mine, `${t('Мой класс')} ${store.me.class_name}`], [school, t('Вся школа')]].map(([list, label], i) =>
     h('button', { class: i ? '' : 'on', onClick: (e) => { lbTabs.querySelectorAll('button').forEach((b) => b.classList.toggle('on', b === e.currentTarget)); drawLb(list); } }, label)));
-  const cls = h('select', { class: 'input', style: { width: 'auto', color: 'var(--ink)', padding: '4px 10px' }, onChange: async (e) => {
-    try { store.me = (await api('/api/me', { method: 'PATCH', body: { class_name: e.target.value } })).user; toast(t('Сохранено')); } catch (err) { toastErr(err); }
-  } }, store.meta.classes.map((c) => h('option', { value: c, selected: c === store.me.class_name }, c)));
+  const cls = classPicker(store.me.class_name, async (v) => {
+    try { store.me = (await api('/api/me', { method: 'PATCH', body: { class_name: v } })).user; toast(t('Сохранено')); } catch (err) { toastErr(err); }
+  }, { width: 'auto', color: 'var(--ink)', padding: '4px 10px', minHeight: '32px' });
 
   return page(h('div', { class: 'wrap stack' },
     h('div', { class: 'grid', style: { gridTemplateColumns: 'minmax(0, 2fr) minmax(280px, 1fr)' } },

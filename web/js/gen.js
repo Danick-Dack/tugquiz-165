@@ -1,6 +1,6 @@
-// Генератор примеров для «Каната на доске» под уровни лицея: 7 класс, 8–9, 10–11.
+// Генератор примеров для «Каната на доске» по уровням: 1–4, 5–6, 7, 8–9 и 10–11 класс.
 // Каждый пример — числовой вопрос, ответ вводится на цифровой клавиатуре.
-export const LEVELS = { 7: '7 класс', 89: '8–9 класс', 1011: '10–11 класс' };
+export const LEVELS = { 4: '1–4 класс', 6: '5–6 класс', 7: '7 класс', 89: '8–9 класс', 1011: '10–11 класс' };
 
 const rnd = (a, b) => a + Math.floor(Math.random() * (b - a + 1));
 const pick = (list) => list[rnd(0, list.length - 1)];
@@ -11,6 +11,21 @@ const linear = (aMax, xMin, xMax) => {
 };
 
 const TASKS = {
+  4: [
+    () => { const a = rnd(12, 59); const b = rnd(11, 40); return [`${a} + ${b} = ?`, a + b]; },
+    () => { const a = rnd(40, 99); const b = rnd(11, a - 5); return [`${a} - ${b} = ?`, a - b]; },
+    () => { const a = rnd(2, 9); const b = rnd(2, 9); return [`${a} \\cdot ${b} = ?`, a * b]; },
+    () => { const b = rnd(2, 9); const c = rnd(2, 9); return [`${b * c} : ${b} = ?`, c]; },
+    () => { const a = rnd(2, 9); const b = rnd(2, 9); const c = rnd(1, 20); return [`${a} \\cdot ${b} + ${c} = ?`, a * b + c]; },
+  ],
+  6: [
+    () => { const a = rnd(11, 19); const b = rnd(3, 9); return [`${a} \\cdot ${b} = ?`, a * b]; },
+    () => { const d = pick([2, 4, 5, 10]); const n = rnd(1, d - 1); const x = d * rnd(2, 12); return [`\\frac{${n}}{${d}} \\cdot ${x} = ?`, (n * x) / d]; },
+    () => { const a = rnd(2, 9) / 10; const b = rnd(2, 9); return [`${String(a).replace('.', '{,}')} \\cdot ${b} = ?`, Math.round(a * b * 10) / 10]; },
+    () => { const p = pick([10, 20, 25, 50]); const x = pick([40, 60, 80, 120, 200]); return [`${p}\\% \\cdot ${x} = ?`, (p * x) / 100]; },
+    () => { const x = rnd(2, 15); const a = rnd(2, 9); return [`${a}x = ${a * x},\\ x = ?`, x]; },
+    () => { const a = rnd(-20, -1); const b = rnd(5, 30); return [`${a} + ${b} = ?`, a + b]; },
+  ],
   7: [
     () => { const a = rnd(-60, 60); const b = rnd(-60, 60); return [`${a} + ${signed(b)} = ?`, a + b]; },
     () => { const a = rnd(-15, -2); const b = rnd(-12, 12) || 3; return [`${a} \\cdot ${signed(b)} = ?`, a * b]; },
@@ -50,5 +65,5 @@ export function makeProblem({ level = 7 } = {}) {
   return { type: 'number', text: `$${tex}$`, answers: [answer] };
 }
 
-/** Уровень по классу квиза: 7 → 7, 8–9 → 89, 10–11 → 1011. */
-export const levelForGrade = (grade) => (grade >= 10 ? 1011 : grade >= 8 ? 89 : 7);
+/** Уровень по классу квиза: 1–4 → 4, 5–6 → 6, 7 → 7, 8–9 → 89, 10–12 → 1011, без класса → 7. */
+export const levelForGrade = (grade) => (!grade ? 7 : grade >= 10 ? 1011 : grade >= 8 ? 89 : grade >= 7 ? 7 : grade >= 5 ? 6 : 4);

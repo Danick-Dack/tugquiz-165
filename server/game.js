@@ -1,4 +1,5 @@
 // Живые игры по PIN: лобби → вопрос → (проверка учителем) → итоги вопроса → … → финал.
+// Ведущий может досрочно закрыть вопрос, добавить 5 секунд, вернуться к прошлым итогам, завершить игру и сыграть ещё раз.
 // Режимы: tug — «Арқан тартыс» (2 команды, канат), duel — команды отвечают по очереди, solo — каждый сам за себя.
 import { WebSocketServer } from 'ws';
 import { randomInt, randomBytes } from 'node:crypto';
@@ -6,6 +7,8 @@ import * as db from './db.js';
 import { gradeAnswer, normText, points, pull, ropeStep } from './quizlib.js';
 
 const LEAD_IN = 3000; // «Приготовьтесь» перед открытием ответов, мс
+const EXTRA_MAX = 120e3; // сколько всего можно добавить к одному вопросу кнопкой «+5 с», мс
+const L = 'ABCDEF';
 const TEAMS = ['A', 'B'];
 const byPin = new Map();
 export const byId = new Map();
@@ -18,29 +21,42 @@ const newPin = () => { let p; do p = String(randomInt(100000, 999999)); while (b
 const send = (ws, msg) => { if (ws.readyState === 1) ws.send(typeof msg === 'string' ? msg : JSON.stringify(msg)); };
 const round1 = (n) => Math.round(n * 10) / 10;
 
+// Порядок правых частей «соответствия» на экране: перемешан, но не совпадает с правильным.
+const matchOrder = (n) => {
+  const idx = [...Array(n).keys()];
+  if (n < 2) return idx;
+  do shuffle(idx); while (idx.every((v, i) => v === i));
+  return idx;
+};
+const letterOf = (q, orig) => L[(q.order || []).indexOf(orig)] ?? L[orig] ?? '?';
+
 export function answerText(q, value) {
   if (value === null || value === undefined || value === '') return '—';
+  if (q.type === 'match') return Array.isArray(value) ? value.map((v, i) => `${i + 1}–${v >= 0 ? letterOf(q, v) : '?'}`).join(', ') : '—';
   if (q.type === 'choice') return q.options[value]?.text ?? '—';
   if (q.type === 'truefalse') return value === true || value === 'true' ? 'true' : 'false';
   return String(value);
 }
 export const correctText = (q) =>
-  q.type === 'choice' ? q.options[q.correct].text
+  q.type === 'match' ? q.pairs.map((p, i) => `- ${i + 1}–${letterOf(q, i)}: ${p.left} → ${p.right}`).join('\n')
+    : q.type === 'choice' ? q.options[q.correct].text
     : q.type === 'truefalse' ? String(q.correct)
       : q.answers.join(' / ') || '—';
 const publicQuestion = (q) => ({
   type: q.type, text: q.text, image: q.image, video: q.video, time: q.time, double: q.double,
   options: q.type === 'choice' ? q.options : undefined,
+  ...(q.type === 'match' ? { left: q.pairs.map((p) => p.left), right: q.order.map((j) => q.pairs[j].right) } : {}),
 });
 
 export class Game {
   constructor({ id, hostId, quiz, mode, opts = {} }) {
-    Object.assign(this, { id, hostId, mode, pin: newPin(), title: quiz.title, subject: quiz.subject, quizId: quiz.id });
+    Object.assign(this, { id, hostId, mode, pin: newPin(), title: quiz.title, subject: quiz.subject, quizId: quiz.id, quiz, rawOpts: opts });
     let qs = quiz.questions.map((q) => ({ ...q }));
     if (opts.shuffle) shuffle(qs);
     if (opts.limit > 0) qs = qs.slice(0, opts.limit);
     const scale = Math.min(3, Math.max(0.5, Number(opts.timeScale) || 1));
-    this.questions = qs.map((q) => ({ ...q, time: Math.min(300, Math.max(5, Math.round(q.time * scale))) }));
+    this.questions = qs.map((q) => ({ ...q, time: Math.min(300, Math.max(5, Math.round(q.time * scale))),
+      ...(q.type === 'match' ? { order: matchOrder(q.pairs.length) } : {}) }));
     this.opts = {
       teamNames: [String(opts.teamNames?.[0] || 'Красные').slice(0, 20), String(opts.teamNames?.[1] || 'Синие').slice(0, 20)],
       autoTeams: Boolean(opts.autoTeams),
@@ -51,6 +67,7 @@ export class Game {
     this.hosts = new Set();
     this.phase = 'lobby';
     this.qi = -1;
+    this.maxQi = -1; // самый дальний заданный вопрос; qi < maxQi — ведущий листает прошлые итоги
     this.answers = [];
     this.rope = 0;
     this.ropeHist = [0];
@@ -63,6 +80,8 @@ export class Game {
 
   get team() { return this.mode !== 'solo'; }
   get q() { return this.questions[this.qi]; }
+  /** Сколько секунд даётся на текущий вопрос с учётом «+5 с». */
+  get limit() { return (this.deadline - this.opensAt) / 1000; }
   list() { return [...this.players.values()]; }
   teamSize(t) { return this.list().filter((p) => p.team === t).length; }
   eligible(p) { return this.mode !== 'duel' || p.team === this.activeTeam; }
@@ -110,9 +129,20 @@ export class Game {
     switch (m.t) {
       case 'start': if (this.phase === 'lobby' && this.players.size) this.start(); break;
       case 'next':
-        if (this.phase === 'reveal') this.winner ? this.finish() : this.nextQuestion();
-        else if (this.phase === 'question') this.endQuestion();
+        if (this.phase === 'reveal') {
+          if (this.qi < this.maxQi) { this.qi++; this.broadcast(); } else if (this.winner) this.finish(); else this.nextQuestion();
+        } else if (this.phase === 'question') this.endQuestion();
         break;
+      case 'prev': if (this.phase === 'reveal' && this.qi > 0) { this.qi--; this.broadcast(); } break;
+      case 'addTime':
+        if (this.phase === 'question' && this.deadline - this.opensAt - this.q.time * 1000 < EXTRA_MAX) {
+          this.deadline += 5000;
+          clearTimeout(this.timer);
+          this.timer = setTimeout(() => this.endQuestion(), this.deadline - Date.now() + 300);
+          this.broadcast();
+        }
+        break;
+      case 'again': if (this.phase === 'final' && !this.next) this.again(); break;
       case 'grade': this.setGrade(m.key, m.grade); break;
       case 'gradeDone': if (this.phase === 'grading') this.applyGrading(); break;
       case 'kick':
@@ -141,8 +171,9 @@ export class Game {
   }
 
   nextQuestion() {
-    this.qi++;
-    if (this.qi >= this.questions.length) return this.finish();
+    this.qi = this.maxQi + 1;
+    if (this.qi >= this.questions.length) { this.qi = this.maxQi; return this.finish(); }
+    this.maxQi = this.qi;
     this.phase = 'question';
     this.activeTeam = this.mode === 'duel' ? TEAMS[this.qi % 2] : null;
     this.opensAt = Date.now() + LEAD_IN;
@@ -160,6 +191,11 @@ export class Game {
     if (this.phase !== 'question' || now < this.opensAt - 300 || now > this.deadline + 800 || box[p.id] || !this.eligible(p)) return;
     if (typeof value === 'string') value = value.slice(0, 200);
     const q = this.q;
+    if (q.type === 'match') {
+      // Телефон присылает позиции правых частей на экране — переводим в исходные номера пар.
+      if (!Array.isArray(value)) return;
+      value = q.pairs.map((_, i) => { const pos = Number(value[i]); return Number.isInteger(pos) && q.order[pos] !== undefined ? q.order[pos] : -1; });
+    } else if (typeof value === 'object' && value !== null) return;
     const auto = gradeAnswer(q, value);
     const rec = { value, elapsed: Math.max(0, (now - this.opensAt) / 1000), auto, grade: q.type === 'open' && this.opts.manualOpen ? null : auto, points: 0 };
     box[p.id] = rec;
@@ -183,10 +219,10 @@ export class Game {
     p.streak = rec.grade === 1 ? p.streak + 1 : 0;
     p.bestStreak = Math.max(p.bestStreak, p.streak);
     p.correct += rec.grade;
-    rec.points = points({ grade: rec.grade, elapsed: rec.elapsed, limit: q.time, streak: p.streak, double: q.double });
+    rec.points = points({ grade: rec.grade, elapsed: rec.elapsed, limit: this.limit, streak: p.streak, double: q.double });
     p.score += rec.points;
     if (this.mode === 'tug' && p.team) {
-      const d = pull({ grade: rec.grade, elapsed: rec.elapsed, limit: q.time, teamSize: this.sizes[p.team], step: this.step });
+      const d = pull({ grade: rec.grade, elapsed: rec.elapsed, limit: this.limit, teamSize: this.sizes[p.team], step: this.step });
       this.rope = Math.max(-100, Math.min(100, this.rope + (p.team === 'A' ? -d : d)));
     }
     if (p.team) this.teamScore[p.team] += this.mode === 'duel' ? rec.points / Math.max(1, this.sizes[p.team]) : rec.points;
@@ -237,6 +273,21 @@ export class Game {
     this.broadcast();
   }
 
+  /** «Сыграть ещё раз»: новая игра с тем же квизом и настройками, ученики и ведущий переходят в её лобби сами. */
+  again() {
+    const g = createGame({ hostId: this.hostId, quiz: this.quiz, mode: this.mode, opts: this.rawOpts });
+    this.next = g.id;
+    for (const p of this.list()) {
+      for (const ws of [...p.socks]) g.join(ws, { name: p.name, user: p.userId ? { id: p.userId, name: p.name } : null });
+      const moved = g.list().find((x) => x.name === p.name || (p.userId && x.userId === p.userId));
+      if (moved && g.team && p.team) moved.team = p.team;
+      p.socks.clear();
+    }
+    g.broadcast();
+    for (const ws of this.hosts) send(ws, { t: 'moved', id: g.id });
+    this.hosts.clear();
+  }
+
   byScore() {
     const { A, B } = this.teamScore;
     return Math.abs(A - B) < 1 ? 'draw' : A > B ? 'A' : 'B';
@@ -251,7 +302,7 @@ export class Game {
       t: 'state', now: Date.now(), id: this.id, pin: this.pin, mode: this.mode, title: this.title, subject: this.subject,
       phase: this.phase, qi: this.qi, total: this.questions.length, opts: this.opts, rope: this.rope,
       teamScore: this.roundScores(), activeTeam: this.activeTeam, opensAt: this.opensAt, deadline: this.deadline,
-      winner: this.winner || null,
+      winner: this.winner || null, review: this.qi < this.maxQi,
       teams: this.team ? Object.fromEntries(TEAMS.map((t, i) => [t, { name: this.opts.teamNames[i], size: this.teamSize(t) }])) : null,
     };
   }
@@ -318,7 +369,7 @@ export class Game {
   broadcast() { this.sendHosts(); for (const p of this.list()) this.sendPlayer(p); }
 
   buildSummary() {
-    const qs = this.questions.slice(0, Math.max(0, this.qi + (this.phase === 'final' ? 1 : 0)));
+    const qs = this.questions.slice(0, Math.max(0, this.maxQi + 1));
     const players = this.ranked().map((p, i) => ({
       name: p.name, team: p.team, userId: p.userId, score: p.score, correct: round1(p.correct), answered: p.answered, place: i + 1,
       avgTime: p.answered ? round1(p.timeSum / p.answered) : null, bestStreak: p.bestStreak,

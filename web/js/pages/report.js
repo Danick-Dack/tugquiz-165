@@ -128,5 +128,5 @@ export async function report(id) {
             title: a ? `${fmtAnswer(a.v)} · ${a.t} ${t('с')} · +${a.p}` : t('нет ответа'),
             style: { background: !a ? '#f1f5f9' : a.g === 1 ? 'var(--ok-s)' : a.g > 0 ? 'var(--part-s)' : 'var(--bad-s)', textAlign: 'center', fontSize: '.8rem' },
           }, a ? (a.g === 1 ? '✓' : a.g > 0 ? '½' : '✗') : '—')))))))) : null,
-      h('div', { class: 'small muted center', style: { marginTop: '10px' } }, 'TugQuiz · SL165 · Developed by Daniyar')));
+      h('div', { class: 'small muted center', style: { marginTop: '10px' } }, 'TugQuiz · SL165 · Developed by Daniyar Dauletuly')));
 }

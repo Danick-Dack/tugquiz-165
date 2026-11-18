@@ -1,19 +1,47 @@
-// Редактор квиза: информация, вопросы четырёх типов, формулы, медиа, предпросмотр «как ученик».
+// Редактор квиза: информация, вопросы пяти типов (с соответствием), формулы, медиа, свой предмет, предпросмотр «как ученик».
 import { h, fill, api, store, go, icon, ic, modal, toast, toastErr, ask, pickFile, uploadFile, fmtDur } from '../core.js';
 import { t, lang } from '../i18n.js';
 import { teacherPage } from '../app.js';
 import { rich, questionEl } from '../content.js';
 import { launchDialog } from './launch.js';
 
-const TYPES = [['choice', 'Выбор ответа'], ['truefalse', 'Верно / неверно'], ['number', 'Число'], ['open', 'Свой ответ']];
+export const TYPES = [['choice', 'Выбор ответа'], ['truefalse', 'Верно / неверно'], ['number', 'Число'], ['open', 'Свой ответ'], ['match', 'Соответствие']];
 const TIMES = [10, 15, 20, 30, 45, 60, 90, 120];
 const LETTERS = 'ABCDEF';
 const newQuestion = (type = 'choice') => ({
-  type, text: '', image: '', video: '', time: type === 'truefalse' ? 15 : 20, double: false, explain: '',
+  type, text: '', image: '', video: '', time: type === 'truefalse' ? 15 : type === 'match' ? 40 : 20, double: false, explain: '',
+  ...(type === 'match' ? { pairs: [{ left: '', right: '' }, { left: '', right: '' }, { left: '', right: '' }] } : {}),
   ...(type === 'choice' ? { options: [{ text: '' }, { text: '' }, { text: '' }, { text: '' }], correct: 0 } : {}),
   ...(type === 'truefalse' ? { correct: true } : {}),
   ...(type === 'number' || type === 'open' ? { answers: [] } : {}),
 });
+
+// ---------- предмет: список + «свой предмет» ----------
+const ADD = '__add';
+export function subjectSelect(value, onChange) {
+  const sel = h('select', { class: 'input' });
+  const draw = (v) => fill(sel, store.meta.subjects.map((x) => h('option', { value: x.key, selected: x.key === v }, x[lang()] || x.ru)),
+    h('option', { value: ADD }, `+ ${t('Свой предмет…')}`));
+  draw(value);
+  sel.addEventListener('change', () => {
+    if (sel.value !== ADD) { value = sel.value; onChange(value); return; }
+    sel.value = value;
+    const name = h('input', { class: 'input', maxLength: 40, placeholder: t('Например: Французский язык, Психология') });
+    modal({ title: t('Свой предмет'), body: h('div', { class: 'stack' }, name,
+      h('p', { class: 'small muted' }, t('Предмет появится в списке у всех учителей'))),
+    actions: [{ label: t('Отмена'), kind: 'ghost' }, { label: t('Добавить'), kind: 'primary', onClick: async () => {
+      try {
+        const r = await api('/api/subjects', { method: 'POST', body: { name: name.value } });
+        store.meta = r.meta;
+        value = r.key;
+        draw(value);
+        onChange(value);
+      } catch (e) { toastErr(e); return false; }
+    } }] });
+    setTimeout(() => name.focus(), 50);
+  });
+  return sel;
+}
 
 // ---------- формулы ----------
 const FX = [
@@ -113,12 +141,24 @@ function questionCard(quiz, i, redraw, markDirty) {
     if (type === q.type) return;
     const fresh = newQuestion(type);
     if (type === 'choice' && q.type === 'truefalse') fresh.options = [{ text: t('Верно') }, { text: t('Неверно') }];
+    if (type === 'match' && q.type === 'choice') fresh.pairs = q.options.map((o) => ({ left: o.text, right: '' }));
     quiz.questions[i] = { ...fresh, text: q.text, image: q.image, video: q.video, explain: q.explain, double: q.double };
     markDirty(); redraw();
   };
   const move = (d) => { const qs = quiz.questions; [qs[i], qs[i + d]] = [qs[i + d], qs[i]]; markDirty(); redraw(); };
 
   const answersArea = () => {
+    if (q.type === 'match') {
+      return h('div', { class: 'stack' }, h('b', { class: 'small' }, t('Пары: слева — справа. Ученики увидят правую часть перемешанной')),
+        q.pairs.map((pr, k) => h('div', { class: 'pair-row' },
+          h('span', { class: 'num' }, k + 1),
+          h('input', { class: 'input', value: pr.left, placeholder: t('Понятие'), onInput: (e) => { pr.left = e.target.value; markDirty(); } }),
+          h('span', { class: 'muted' }, '→'),
+          h('input', { class: 'input', value: pr.right, placeholder: t('Пара к нему'), onInput: (e) => { pr.right = e.target.value; markDirty(); } }),
+          q.pairs.length > 2 ? h('button', { type: 'button', class: 'btn sm icon ghost', title: t('Удалить пару'), html: icon('trash'), onClick: () => { q.pairs.splice(k, 1); markDirty(); redraw(); } }) : null)),
+        q.pairs.length < 6 ? h('button', { type: 'button', class: 'btn sm', onClick: () => { q.pairs.push({ left: '', right: '' }); markDirty(); redraw(); } }, ic('plus'), t('Пара')) : null,
+        h('div', { class: 'small muted' }, t('Балл — доля верных пар: 2 из 3 дают ⅔ очков')));
+    }
     if (q.type === 'choice') {
       return h('div', { class: 'stack' }, h('b', { class: 'small' }, t('Варианты (нажмите на букву правильного)')),
         q.options.map((o, k) => h('div', { class: 'opt-row' },
@@ -220,15 +260,14 @@ export async function editor(id) {
   const info = h('div', { class: 'card stack' },
     field('Название квиза', h('input', { class: 'input', value: quiz.title, maxLength: 120, placeholder: t('Например: Квадратные уравнения, 8 класс'), onInput: (e) => { quiz.title = e.target.value; markDirty(); } })),
     h('div', { class: 'row' },
-      h('div', { class: 'grow' }, field('Предмет', h('select', { class: 'input', onChange: (e) => { quiz.subject = e.target.value; markDirty(); } },
-        store.meta.subjects.map((s) => h('option', { value: s.key, selected: s.key === quiz.subject }, (s[lang()] || s.ru)))))),
+      h('div', { class: 'grow' }, field('Предмет', subjectSelect(quiz.subject, (v) => { quiz.subject = v; markDirty(); }))),
       field('Класс', h('select', { class: 'input', onChange: (e) => { quiz.grade = Number(e.target.value); markDirty(); } },
         [0, ...store.meta.grades].map((g) => h('option', { value: g, selected: g === quiz.grade }, g ? `${g}` : t('любой'))))),
       field('Язык', h('select', { class: 'input', onChange: (e) => { quiz.lang = e.target.value; markDirty(); } },
         [['ru', 'Русский'], ['kk', 'Қазақша'], ['en', 'English']].map(([v, l]) => h('option', { value: v, selected: v === quiz.lang }, l))))),
     field('Описание (необязательно)', h('input', { class: 'input', value: quiz.description || '', maxLength: 500, onInput: (e) => { quiz.description = e.target.value; markDirty(); } })),
     h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: Boolean(quiz.shared), onChange: (e) => { quiz.shared = e.target.checked ? 1 : 0; markDirty(); } }),
-      t('Поделиться с учителями лицея (появится в библиотеке)')));
+      t('Поделиться с коллегами (появится в библиотеке)')));
 
   redraw();
   const node = teacherPage('quizzes',
@@ -268,11 +307,13 @@ export function previewQuiz(quiz) {
   const reveal = (q, value, area, left) => {
     clearInterval(timer);
     const ok = value === undefined ? false
+      : q.type === 'match' ? value.every((v, k) => v === k)
       : q.type === 'choice' ? value === q.correct
         : q.type === 'truefalse' ? value === q.correct
           : q.type === 'number' ? q.answers.some((a) => Math.abs(a - Number(String(value).replace(',', '.'))) < 1e-6)
             : q.answers.some((a) => a.toLowerCase().trim() === String(value).toLowerCase().trim());
-    const right = q.type === 'choice' ? q.options[q.correct].text : q.type === 'truefalse' ? (q.correct ? t('Верно') : t('Неверно')) : q.answers.join(' / ') || t('оценивает учитель');
+    const right = q.type === 'match' ? q.pairs.map((pr) => `${pr.left} → ${pr.right}`).join('; ')
+      : q.type === 'choice' ? q.options[q.correct].text : q.type === 'truefalse' ? (q.correct ? t('Верно') : t('Неверно')) : q.answers.join(' / ') || t('оценивает учитель');
     fill(area, h('div', { class: 'card center', style: { background: ok ? 'var(--ok-s)' : 'var(--bad-s)' } },
       h('div', { class: 'big-mark', style: { color: ok ? 'var(--ok)' : 'var(--bad)', fontSize: '3rem' } }, ok ? '✓' : '✗'),
       h('div', null, value === undefined ? t('Время вышло') : ok ? `${t('Верно')} ${left > 0 ? `· ${t('осталось')} ${left} ${t('с')}` : ''}` : t('Неверно')),
@@ -291,7 +332,21 @@ export function previewQuiz(quiz) {
     clock.textContent = `${left} ${t('с')}`;
     const answer = (v) => reveal(q, v, area, left);
     if (q.type === 'choice') area.append(h('div', { class: 'opts' }, q.options.map((o, n) => h('button', { class: `opt o${n}`, onClick: () => answer(n) }, h('span', { class: 'L' }, LETTERS[n]), h('span', { class: 'rich', html: rich(o.text) }), o.image ? h('img', { src: o.image, alt: '' }) : null))));
-    else if (q.type === 'truefalse') area.append(h('div', { class: 'opts' }, h('button', { class: 'opt o3', onClick: () => answer(true) }, t('Верно')), h('button', { class: 'opt o0', onClick: () => answer(false) }, t('Неверно'))));
+    else if (q.type === 'match') {
+      const order = q.pairs.map((_, k) => k).sort(() => Math.random() - 0.5);
+      const pick = q.pairs.map(() => null);
+      const go2 = h('button', { class: 'btn primary', disabled: true, onClick: () => answer(pick) }, t('Ответить'));
+      area.append(h('div', { class: 'stack' },
+        h('div', { class: 'card match-key' }, order.map((j, k) => h('div', { class: 'mrow' }, h('span', { class: 'L' }, LETTERS[k]), h('span', { class: 'rich', html: rich(q.pairs[j].right) })))),
+        q.pairs.map((pr, i) => {
+          const btns = order.map((j, k) => h('button', { type: 'button', class: 'mpick', onClick: () => {
+            pick[i] = pick[i] === j ? null : j;
+            btns.forEach((b, n) => b.classList.toggle('on', pick[i] === order[n]));
+            go2.disabled = pick.some((v) => v === null);
+          } }, LETTERS[k]));
+          return h('div', { class: 'mq' }, h('div', { class: 'mq-l' }, h('span', { class: 'L' }, i + 1), h('span', { class: 'rich', html: rich(pr.left) })), h('div', { class: 'mq-r' }, btns));
+        }), go2));
+    } else if (q.type === 'truefalse') area.append(h('div', { class: 'opts' }, h('button', { class: 'opt o3', onClick: () => answer(true) }, t('Верно')), h('button', { class: 'opt o0', onClick: () => answer(false) }, t('Неверно'))));
     else {
       const inp = h('input', { class: 'input', inputmode: q.type === 'number' ? 'decimal' : 'text', placeholder: t('Ваш ответ'), style: { fontSize: '1.3rem' } });
       area.append(h('form', { class: 'row', onSubmit: (e) => { e.preventDefault(); answer(inp.value); } }, h('div', { class: 'grow' }, inp), h('button', { class: 'btn primary' }, t('Ответить'))));

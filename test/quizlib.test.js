@@ -71,3 +71,21 @@ test('промт содержит предмет, тему и формат', () 
   assert.match(p, /казахском/);
   assert.match(p, /"questions"/);
 });
+
+test('соответствие и свой предмет', () => {
+  const q = normalizeQuestion({ type: 'match', text: 'x', pairs: [['a', '1'], ['b', '2'], ['', '3']] });
+  assert.equal(q.pairs.length, 2);
+  assert.equal(gradeAnswer(q, [0, 1]), 1);
+  assert.equal(gradeAnswer(q, [1, 0]), 0);
+  assert.throws(() => normalizeQuestion({ type: 'match', text: 'x', pairs: [['a', '1']] }), /2 пары/);
+  const quiz = { title: 'T', subject: 'c123', grade: 12, questions: [{ type: 'truefalse', text: 'x', correct: true }] };
+  assert.equal(normalizeQuiz(quiz).subject, 'gen');
+  assert.equal(normalizeQuiz(quiz, (k) => k === 'c123').subject, 'c123');
+  assert.equal(normalizeQuiz(quiz).grade, 12);
+});
+
+test('ИИ: набор тестов и варианты с буквами', () => {
+  const r = parseAiText('{"quizzes":[{"title":"A","questions":[{"type":"choice","text":"?","options":["a) один","b) два"],"correct":1}]},{"title":"B","questions":[]}]}');
+  assert.equal(r.quizzes.length, 1);
+  assert.equal(r.quizzes[0].questions[0].options[0].text, 'один');
+});

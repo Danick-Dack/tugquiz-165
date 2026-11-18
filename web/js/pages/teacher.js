@@ -87,6 +87,7 @@ export async function dashboard() {
     h('div', { class: 'quick' },
       quick('q1', 'plus', 'Создать квиз', 'Свои вопросы, формулы, картинки', '#/t/edit/new'),
       quick('q2', 'msg', 'ИИ-генератор', 'Вопросы по теме за минуту', '#/t/ai'),
+      quick('q5', 'spark', 'Набор тестов по теме', 'ИИ составит 3–5 тестов от простого к сложному', '#/t/ai?pack'),
       quick('q3', 'rope', 'Канат на доске', 'Арқан тартыс без телефонов', '#/t/board'),
       quick('q4', 'book', 'Библиотека', 'Шаблоны и квизы коллег', '#/t/library')),
     !games.length ? h('div', { style: { height: '18px' } }) : h('div', { class: 'card row', style: { margin: '16px 0', gap: '40px' } },
@@ -235,7 +236,7 @@ export async function admin() {
         h('button', { class: 'btn primary', onClick: async () => { try { await api('/api/admin/settings', { method: 'PUT', body: { invite_code: invite.value } }); toast(t('Сохранено')); } catch (e) { toastErr(e); } } }, t('Сохранить код'))),
       h('div', { class: 'card stack' }, h('h3', null, t('ИИ для генерации вопросов')),
         h('p', { class: 'small muted' }, conf.ai.hasKey ? t('ИИ подключён. Учителя могут генерировать вопросы одной кнопкой.')
-          : t('Без ключа учителя всё равно могут пользоваться ИИ через промт (копировать в любой чат). С бесплатным ключом Gemini или Groq — одной кнопкой.')),
+          : t('Сейчас работает бесплатный ИИ без ключа: он медленнее, проще и не читает фото. С бесплатным ключом Gemini или Groq вопросы точнее и быстрее.')),
         field('Сервис', provider), field('Ключ API', key, keyLink),
         h('details', null, h('summary', { class: 'small muted', style: { cursor: 'pointer' } }, t('Адрес и модель (для опытных)')),
           h('div', { class: 'stack', style: { marginTop: '10px' } }, field('Адрес API', base), field('Модель', model))),

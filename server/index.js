@@ -8,9 +8,9 @@ import os from 'node:os';
 import { exec } from 'node:child_process';
 import QRCode from 'qrcode';
 import * as db from './db.js';
-import { meta, CLASSES } from './constants.js';
+import { meta, isClass, SUBJECTS, CUSTOM_COLORS } from './constants.js';
 import { normalizeQuiz } from './quizlib.js';
-import { buildPrompt, parseAiText, callAi } from './ai.js';
+import { buildPrompt, buildPackPrompt, parseAiText, callAi } from './ai.js';
 import { hashPassword, checkPassword, newSession, dropSession, userByToken, publicUser, sessionCookie, readCookie } from './auth.js';
 import { createGame, attachSockets, byId } from './game.js';
 
@@ -115,7 +115,26 @@ async function upload(req, kind) {
 const routes = [];
 const on = (method, pattern, handler) => routes.push([method, new RegExp(`^${pattern}$`), handler]);
 
-on('GET', '/api/me', ({ user }) => ({ user, needsSetup: !db.one('SELECT 1 FROM users'), meta: meta() }));
+// Свои предметы учителей (французский, психология…) хранятся в настройках и видны всем учителям.
+const customSubjects = () => db.getSetting('subjects_custom', []);
+const isSubject = (k) => Boolean(SUBJECTS[k]) || customSubjects().some((s) => s.key === k);
+const siteMeta = () => meta(customSubjects());
+
+on('GET', '/api/me', ({ user }) => ({ user, needsSetup: !db.one('SELECT 1 FROM users'), meta: siteMeta() }));
+
+on('POST', '/api/subjects', ({ user, body }) => {
+  needTeacher(user);
+  const name = str(body.name, 40).replace(/\s+/g, ' ');
+  if (name.length < 2) fail(400, 'Введите название предмета');
+  const all = siteMeta().subjects;
+  const same = all.find((s) => [s.ru, s.kk].some((n) => n.toLowerCase() === name.toLowerCase()));
+  if (same) return { key: same.key, meta: siteMeta() };
+  const list = customSubjects();
+  if (list.length >= 200) fail(400, 'Слишком много своих предметов');
+  const item = { key: `c${Date.now().toString(36)}`, ru: name, kk: name, color: CUSTOM_COLORS[list.length % CUSTOM_COLORS.length] };
+  db.setSetting('subjects_custom', [...list, item]);
+  return { key: item.key, meta: siteMeta() };
+});
 
 on('POST', '/api/register', async ({ body, req, res }) => {
   const first = !db.one('SELECT 1 FROM users');
@@ -129,8 +148,8 @@ on('POST', '/api/register', async ({ body, req, res }) => {
   if (role === 'teacher' && str(body.invite).toUpperCase() !== String(db.getSetting('invite_code')).toUpperCase()) {
     fail(403, 'Неверный код учителя. Его выдаёт администратор.');
   }
-  const cls = role === 'student' ? str(body.class_name, 4) : '';
-  if (role === 'student' && !CLASSES.includes(cls)) fail(400, 'Выберите класс');
+  const cls = role === 'student' ? str(body.class_name, 4).toUpperCase() : '';
+  if (role === 'student' && !isClass(cls)) fail(400, 'Выберите класс');
   if (db.one('SELECT 1 FROM users WHERE login=?', login)) fail(409, 'Такой логин уже занят');
   const id = Number(db.run('INSERT INTO users(role,login,name,pass,class_name,created) VALUES(?,?,?,?,?,?)',
     role, login, name, await hashPassword(password), cls, Date.now()).lastInsertRowid);
@@ -161,8 +180,9 @@ on('PATCH', '/api/me', async ({ user, body }) => {
     db.run('UPDATE users SET name=? WHERE id=?', name, user.id);
   }
   if (body.class_name !== undefined && user.role === 'student') {
-    CLASSES.includes(body.class_name) || fail(400, 'Выберите класс');
-    db.run('UPDATE users SET class_name=? WHERE id=?', body.class_name, user.id);
+    const cls = str(body.class_name, 4).toUpperCase();
+    isClass(cls) || fail(400, 'Выберите класс');
+    db.run('UPDATE users SET class_name=? WHERE id=?', cls, user.id);
   }
   if (body.tour_done !== undefined) db.run('UPDATE users SET tour_done=? WHERE id=?', body.tour_done ? 1 : 0, user.id);
   if (body.password) {
@@ -186,7 +206,7 @@ on('GET', '/api/quizzes/(\\d+)', ({ user, params }) => (needTeacher(user), getQu
 
 on('POST', '/api/quizzes', ({ user, body }) => {
   needTeacher(user);
-  const q = normalizeQuiz(body);
+  const q = normalizeQuiz(body, isSubject);
   const id = db.run(`INSERT INTO quizzes(owner_id,title,subject,grade,description,lang,questions,shared,created,updated)
                      VALUES(?,?,?,?,?,?,?,?,?,?)`, user.id, q.title, q.subject, q.grade, q.description, q.lang,
   JSON.stringify(q.questions), q.shared, Date.now(), Date.now()).lastInsertRowid;
@@ -196,7 +216,7 @@ on('POST', '/api/quizzes', ({ user, body }) => {
 on('PUT', '/api/quizzes/(\\d+)', ({ user, body, params }) => {
   needTeacher(user);
   const old = getQuiz(params[0], user, true);
-  const q = normalizeQuiz(body);
+  const q = normalizeQuiz(body, isSubject);
   db.run('UPDATE quizzes SET title=?,subject=?,grade=?,description=?,lang=?,questions=?,shared=?,updated=? WHERE id=?',
     q.title, q.subject, q.grade, q.description, q.lang, JSON.stringify(q.questions), q.shared, Date.now(), old.id);
   return { id: old.id };
@@ -223,8 +243,12 @@ on('POST', '/api/upload', ({ user, req, url }) => (needTeacher(user), upload(req
 
 // ---------- ИИ ----------
 const aiConf = () => db.getSetting('ai', {});
-on('GET', '/api/ai/status', ({ user }) => (needTeacher(user), { enabled: Boolean(aiConf().key), provider: aiConf().provider || '' }));
-on('POST', '/api/ai/prompt', ({ user, body }) => (needTeacher(user), { prompt: buildPrompt(body) }));
+// Без ключа администратора работает бесплатный ИИ (free), с ключом — выбранный в настройках.
+on('GET', '/api/ai/status', ({ user }) => (needTeacher(user), { enabled: true, free: !aiConf().key, provider: aiConf().key ? aiConf().provider || '' : 'free' }));
+const subjectName = (k) => customSubjects().find((s) => s.key === k)?.ru || '';
+on('POST', '/api/ai/prompt', ({ user, body }) => (needTeacher(user), {
+  prompt: (body.pack ? buildPackPrompt : buildPrompt)({ ...body, subjectName: subjectName(body.subject) }),
+}));
 on('POST', '/api/ai/parse', ({ user, body }) => {
   needTeacher(user);
   try { return parseAiText(body.text); } catch (e) { fail(400, e.message); }
@@ -234,7 +258,8 @@ on('POST', '/api/ai/generate', async ({ user, body }) => {
   let text;
   const image = body.image ? String(body.image) : '';
   if (image && !/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(image)) fail(400, 'Фото должно быть JPG, PNG или WebP');
-  try { text = await callAi(aiConf(), buildPrompt({ ...body, hasImage: Boolean(image) }), image || undefined); } catch (e) {
+  const prompt = (body.pack ? buildPackPrompt : buildPrompt)({ ...body, hasImage: Boolean(image), subjectName: subjectName(body.subject) });
+  try { text = await callAi(aiConf(), prompt, image || undefined); } catch (e) {
     fail(502, image ? `${e.message}. Если модель не понимает фото — выберите Gemini в настройках ИИ или уберите фото.` : e.message);
   }
   try { return parseAiText(text); } catch (e) { fail(502, `ИИ ответил в неверном формате: ${e.message}`); }
@@ -308,7 +333,7 @@ on('GET', '/api/student/stats', ({ user }) => {
 on('GET', '/api/leaderboard', ({ user, url }) => {
   user || fail(401, 'Войдите в аккаунт');
   const cls = url.searchParams.get('class');
-  return CLASSES.includes(cls)
+  return isClass(cls)
     ? db.all("SELECT name, class_name, xp FROM users WHERE role='student' AND active=1 AND class_name=? ORDER BY xp DESC LIMIT 50", cls)
     : db.all("SELECT name, class_name, xp FROM users WHERE role='student' AND active=1 ORDER BY xp DESC LIMIT 50");
 });

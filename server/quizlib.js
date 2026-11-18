@@ -1,7 +1,7 @@
 // Проверка квизов, оценка ответов и подсчёт очков. Чистые функции — их покрывают тесты.
 import { SUBJECTS } from './constants.js';
 
-export const TYPES = ['choice', 'truefalse', 'number', 'open'];
+export const TYPES = ['choice', 'truefalse', 'number', 'open', 'match'];
 
 const str = (v, max) => String(v ?? '').trim().slice(0, max);
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
@@ -30,7 +30,7 @@ export function normalizeQuestion(q, i = 0) {
     text: str(q.text ?? q.question, 3000),
     image: cleanUrl(q.image),
     video: cleanUrl(q.video),
-    time: clamp(Math.round(Number(q.time) || 20), 5, 300),
+    time: clamp(Math.round(Number(q.time) || (type === 'match' ? 40 : 20)), 5, 300),
     double: Boolean(q.double),
     explain: str(q.explain, 1000),
   };
@@ -54,6 +54,16 @@ export function normalizeQuestion(q, i = 0) {
     if (!Number.isInteger(correct) || correct < 0 || correct >= options.length) fail('не отмечен правильный вариант');
     return { ...out, options, correct };
   }
+  if (type === 'match') {
+    // Пары «слева — справа»; правильная пара для левого i — правый i. Справа ученики видят пары перемешанными.
+    const pairs = (Array.isArray(q.pairs) ? q.pairs : [])
+      .map((p) => (Array.isArray(p) ? { left: p[0], right: p[1] } : p || {}))
+      .map((p) => ({ left: str(p.left, 300), right: str(p.right, 300) }))
+      .filter((p) => p.left && p.right)
+      .slice(0, 6);
+    if (pairs.length < 2) fail('нужно минимум 2 пары');
+    return { ...out, pairs };
+  }
   if (type === 'truefalse') {
     const v = q.correct ?? q.answer;
     return { ...out, correct: v === true || ['true', 'да', 'верно', 'иә', '1'].includes(String(v).toLowerCase()) };
@@ -67,7 +77,7 @@ export function normalizeQuestion(q, i = 0) {
   return { ...out, answers: raw.map((a) => str(a, 200)).filter(Boolean).slice(0, 10) };
 }
 
-export function normalizeQuiz(body) {
+export function normalizeQuiz(body, isSubject = (k) => Boolean(SUBJECTS[k])) {
   const title = str(body?.title, 120);
   if (!title) throw new Error('Введите название квиза');
   const list = Array.isArray(body.questions) ? body.questions : [];
@@ -75,8 +85,8 @@ export function normalizeQuiz(body) {
   if (list.length > 100) throw new Error('Не больше 100 вопросов');
   return {
     title,
-    subject: SUBJECTS[body.subject] ? body.subject : 'gen',
-    grade: clamp(Number(body.grade) || 0, 0, 11),
+    subject: isSubject(body.subject) ? body.subject : 'gen',
+    grade: clamp(Number(body.grade) || 0, 0, 12),
     description: str(body.description, 500),
     lang: ['ru', 'kk', 'en'].includes(body.lang) ? body.lang : 'ru',
     shared: body.shared ? 1 : 0,
@@ -90,6 +100,12 @@ export function gradeAnswer(q, value) {
   switch (q.type) {
     case 'choice': return Number(value) === q.correct ? 1 : 0;
     case 'truefalse': return (value === true || value === 'true') === q.correct ? 1 : 0;
+    case 'match': {
+      // value[i] — номер правой части (в исходном порядке), выбранной для левой i. Балл — доля верных пар.
+      if (!Array.isArray(value)) return 0;
+      const right = q.pairs.filter((_, i) => Number(value[i]) === i).length;
+      return Math.round((right / q.pairs.length) * 100) / 100;
+    }
     case 'number': {
       const n = parseNum(value);
       return n !== null && q.answers.some((a) => Math.abs(a - n) <= 1e-6 * Math.max(1, Math.abs(a))) ? 1 : 0;

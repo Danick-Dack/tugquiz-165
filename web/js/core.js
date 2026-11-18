@@ -2,6 +2,7 @@
 import { t, lang } from './i18n.js';
 
 export const store = { me: null, meta: null };
+export const DEV = 'Developed by Daniyar Dauletuly';
 
 /** h('div', {class, onClick, style, html}, ...дети) — создать элемент. */
 export function h(tag, props, ...kids) {
@@ -47,6 +48,20 @@ export const isTeacher = () => ['teacher', 'admin'].includes(store.me?.role);
 export function subj(key) {
   const s = store.meta?.subjects.find((x) => x.key === key) || { ru: '—', kk: '—', color: '#64748b' };
   return { name: lang() === 'kk' ? s.kk : s.ru, color: s.color };
+}
+/** Класс ученика: номер 1–12 и буква. Возвращает элемент со свойством value (например «7А»). */
+export function classPicker(value = '', onChange, style = {}) {
+  const [, n0 = '', l0 = ''] = String(value).match(/^(\d{1,2})(.?)$/) || [];
+  const num = h('select', { class: 'input', required: true, style, 'aria-label': t('Класс') },
+    h('option', { value: '' }, '—'), store.meta.grades.map((g) => h('option', { value: g, selected: String(g) === n0 }, g)));
+  const let_ = h('select', { class: 'input', style, 'aria-label': t('Буква') },
+    h('option', { value: '' }, t('без буквы')), store.meta.letters.map((l) => h('option', { value: l, selected: l === l0 }, l)));
+  const el = h('div', { class: 'class-pick' }, num, let_);
+  Object.defineProperty(el, 'value', { get: () => (num.value ? num.value + let_.value : '') });
+  const changed = () => { if (num.value) onChange?.(el.value); };
+  num.addEventListener('change', changed);
+  let_.addEventListener('change', changed);
+  return el;
 }
 export const subjChip = (key) => { const s = subj(key); return h('span', { class: 'chip' }, h('i', { class: 'dot', style: { background: s.color } }), s.name); };
 

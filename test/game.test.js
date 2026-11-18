@@ -97,3 +97,43 @@ test('повторный вход по токену возвращает тог�
   assert.equal(g.list()[0].name, 'Тимур');
   g.onHost({ t: 'finish' });
 });
+
+test('ведущий: +5 секунд, назад к прошлым итогам, соответствие, сыграть ещё раз', () => {
+  const q2 = { ...quiz, questions: [quiz.questions[0], { type: 'match', text: 'Пары', pairs: [{ left: 'H2O', right: 'вода' }, { left: 'NaCl', right: 'соль' }, { left: 'CO2', right: 'газ' }], time: 30 }] };
+  const g = createGame({ hostId: null, quiz: q2, mode: 'solo', opts: {} });
+  const host = fakeWs(); g.hosts.add(host);
+  const ws = fakeWs(); g.join(ws, { name: 'Арман' });
+  const [p] = g.list();
+  g.onHost({ t: 'start' });
+  const before = g.deadline;
+  g.onHost({ t: 'addTime' });
+  assert.equal(g.deadline - before, 5000, '+5 секунд к вопросу');
+  open(g); g.answer(p, '4'); g.onHost({ t: 'next' });
+  assert.equal(g.phase, 'reveal');
+  g.onHost({ t: 'next' });
+  assert.equal(g.qi, 1);
+  const mq = g.q;
+  assert.notDeepEqual(mq.order, [0, 1, 2], 'правые части перемешаны');
+  const pub = g.playerState(p).question;
+  assert.equal(pub.pairs, undefined, 'ответы не уходят на телефон');
+  open(g);
+  // Ученик выбирает позиции на экране: верно для двух пар из трёх.
+  const pos = [0, 1, 2].map((i) => mq.order.indexOf(i));
+  [pos[1], pos[2]] = [pos[2], pos[1]];
+  g.answer(p, pos);
+  assert.equal(g.answers[1][p.id].grade, 0.33, 'частичный балл за пары');
+  g.onHost({ t: 'next' });
+  g.onHost({ t: 'prev' });
+  assert.deepEqual([g.phase, g.qi, g.base().review], ['reveal', 0, true], 'вернулись к итогам первого вопроса');
+  g.onHost({ t: 'next' });
+  assert.equal(g.qi, 1, 'вперёд по итогам без повторного вопроса');
+  g.onHost({ t: 'next' });
+  assert.equal(g.phase, 'final');
+  assert.equal(g.summary.questions.length, 2);
+  g.onHost({ t: 'again' });
+  assert.equal(host.last().t, 'moved');
+  const ng = host.last().id;
+  assert.ok(ng && ng !== g.id);
+  assert.equal(ws.sent.filter((m) => m.t === 'joined').at(-1).pin !== g.pin, true, 'ученик перешёл в новую игру');
+  assert.equal(ws.game.phase, 'lobby');
+});

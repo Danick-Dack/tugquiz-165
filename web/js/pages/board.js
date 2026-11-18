@@ -22,7 +22,7 @@ export async function boardSetup() {
   const line = (label, ctl) => h('div', { class: 'row between' }, h('b', null, t(label)), ctl);
   const drawSrc = () => fill(srcBox, st.source === 'gen'
     ? h('div', { class: 'stack' }, line('Уровень', seg('level', Object.keys(LEVELS).map(Number), (v) => t(LEVELS[v]), () => drawSrc())),
-      h('p', { class: 'small muted' }, t({ 7: 'Отрицательные числа, степени, проценты, уравнения.', 89: 'Квадраты, корни, теорема Виета, дискриминант, проценты.', 1011: 'Логарифмы, производные, прогрессии, факториалы, тригонометрия, интегралы.' }[st.level])))
+      h('p', { class: 'small muted' }, t({ 4: 'Сложение и вычитание до 100, таблица умножения.', 6: 'Дроби, десятичные, проценты, простые уравнения.', 7: 'Отрицательные числа, степени, проценты, уравнения.', 89: 'Квадраты, корни, теорема Виета, дискриминант, проценты.', 1011: 'Логарифмы, производные, прогрессии, факториалы, тригонометрия, интегралы.' }[st.level])))
     : mine.length ? h('label', { class: 'field' }, h('span', null, t('Квиз')), h('select', { class: 'input', onChange: (e) => { st.quizId = Number(e.target.value); } },
       mine.map((q) => h('option', { value: q.id, selected: q.id === st.quizId }, `${q.title} · ${q.count}`))),
       h('div', { class: 'small muted', style: { marginTop: '4px' } }, t('Подойдут вопросы с выбором ответа, «верно/неверно» и числовые.')))
@@ -159,7 +159,7 @@ export function boardPlay() {
   const mid = h('div', { class: 'mid' },
     h('img', { src: '/img/icon-192.png', alt: '', style: { width: '56px' } }),
     h('h2', null, `Арқан тартыс · ${cfg.title}`), clock, h('div', { style: { width: '100%', borderRadius: '16px', overflow: 'hidden' } }, tug.el), score, midBtns,
-    h('div', { class: 'dev' }, 'Developed by Daniyar'));
+    h('div', { class: 'dev' }, 'Developed by Daniyar Dauletuly'));
   const root = h('div', { class: 'bt' }, sides.A.panel, mid, sides.B.panel, overlay);
   const fmt = (sec) => { const s = Math.ceil(sec); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
   clock.textContent = fmt(cfg.duration);

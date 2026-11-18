@@ -1,6 +1,6 @@
 // Экран ведущего для доски/проектора: лобби с PIN и QR → вопрос → проверка → итоги вопроса → финал.
-// Пробел, Enter или → (кликер) — следующий шаг.
-import { h, fill, go, icon, ic, ask, modal, sound, confetti, fullscreen, subj } from '../core.js';
+// Пробел, Enter или → (кликер) — следующий шаг, ← — назад к итогам прошлого вопроса.
+import { h, fill, go, icon, ic, ask, modal, sound, confetti, fullscreen, subj, DEV } from '../core.js';
 import { t } from '../i18n.js';
 import { connect } from '../ws.js';
 import { Tug } from '../rope.js';
@@ -9,7 +9,22 @@ import { MODE_NAMES } from './teacher.js';
 
 const L = 'ABCDEF';
 
+/** Соответствие: слева номера, справа буквы (в порядке, который видят ученики). reveal — показать верные пары. */
+export function matchEl(q, reveal) {
+  const left = q.left || q.pairs.map((p) => p.left);
+  const right = q.right || q.order.map((j) => q.pairs[j].right);
+  if (reveal && q.pairs) {
+    return h('div', { class: 'match-board' }, q.pairs.map((p, i) => h('div', { class: 'mrow win' },
+      h('span', { class: 'L' }, i + 1), h('span', { class: 'rich', html: rich(p.left) }), h('span', { class: 'arrow' }, '→'),
+      h('span', { class: 'L' }, L[q.order.indexOf(i)]), h('span', { class: 'rich', html: rich(p.right) }))));
+  }
+  return h('div', { class: 'match-board two' },
+    h('div', { class: 'stack' }, left.map((t0, i) => h('div', { class: 'mrow' }, h('span', { class: 'L' }, i + 1), h('span', { class: 'rich', html: rich(t0) })))),
+    h('div', { class: 'stack' }, right.map((t0, i) => h('div', { class: 'mrow' }, h('span', { class: 'L' }, L[i]), h('span', { class: 'rich', html: rich(t0) })))));
+}
+
 export function optionsEl(q, reveal) {
+  if (q.type === 'match') return matchEl(q, reveal);
   const items = q.type === 'choice' ? q.options.map((o, k) => ({ k, text: o.text, image: o.image, cls: `o${k % 6}` }))
     : q.type === 'truefalse' ? [{ k: true, text: t('Верно'), cls: 'o3' }, { k: false, text: t('Неверно'), cls: 'o0' }] : null;
   if (!items) return null;
@@ -37,7 +52,7 @@ function timerEl() {
   const arc = el.querySelector('.arc');
   return { el, set(left, total) {
     num.textContent = Math.max(0, Math.ceil(left));
-    arc.style.strokeDashoffset = C * (1 - Math.max(0, left) / total);
+    arc.style.strokeDashoffset = C * (1 - Math.min(1, Math.max(0, left) / total));
     el.classList.toggle('low', left <= 5);
   } };
 }
@@ -57,20 +72,21 @@ export function host(id) {
   const bar = h('div', { class: 'bar' });
   const body = h('div', { class: 'body' });
   const leadin = h('div', { class: 'leadin hidden' });
-  const root = h('div', { class: 'stage' }, bar, h('div', { class: 'orn' }), body, leadin,
-    h('div', { class: 'dev', style: { textAlign: 'center', padding: '8px', opacity: 0.55 } }, 'Developed by Daniyar'));
+  const root = h('div', { class: 'stage' }, bar, h('div', { class: 'orn' }), body, leadin, h('div', { class: 'dev stage-dev' }, DEV));
   let s = null;
   let key = '';
   let view = null;
   let tug = null;
   let seenPlayers = 0;
   let lastSec = -1;
+  const seen = new Set(); // ученики, чья плашка уже появилась в лобби: новые въезжают, старые стоят на месте
 
   const cmd = (type, extra) => conn.send({ t: type, ...extra });
   const conn = connect({
     onOpen: (c) => c.send({ t: 'host', id }),
     onStatus: (ok) => { if (!ok) bar.dataset.off = '1'; else delete bar.dataset.off; drawBar(); },
     onMessage: (m) => {
+      if (m.t === 'moved') { go(`#/host/${m.id}`); return; }
       if (m.t === 'error') {
         fill(body, h('div', { class: 'winner' }, h('h2', null, t('Игра не найдена или уже завершена')), h('a', { class: 'btn primary', href: '#/t' }, t('В кабинет'))));
         return;
@@ -117,7 +133,11 @@ export function host(id) {
       s.teams ? h('button', { class: 'btn', style: { width: '100%' }, onClick: () => { cmd('move', { pid: p.id, team: other }); m.close(); } }, ic('swap'), `${t('Перевести в команду')} «${s.teams[other].name}»`) : null,
       h('button', { class: 'btn danger', style: { width: '100%' }, onClick: () => { cmd('kick', { pid: p.id }); m.close(); } }, ic('x'), t('Удалить из игры'))) });
   }
-  const pill = (p) => h('button', { class: `pl ${p.online ? '' : 'off'}`, onClick: () => playerMenu(p) }, p.name);
+  const pill = (p) => {
+    const fresh = !seen.has(p.id);
+    seen.add(p.id);
+    return h('button', { class: `pl ${p.online ? '' : 'off'} ${fresh ? 'new' : ''}`, onClick: () => playerMenu(p) }, p.name);
+  };
 
   const BUILD = {
     lobby(st) {
@@ -161,7 +181,9 @@ export function host(id) {
         h('div', { class: 'qbox' }, questionEl(q)),
         optionsEl(q) || h('div', { class: 'center', style: { fontSize: '20px', color: 'var(--d-sub)' } }, ic('phone', { style: { width: '20px', verticalAlign: 'middle' } }), ' ', t('Введите ответ на телефоне')),
         tug ? tugBlock() : sb?.el,
-        h('div', { class: 'row end' }, h('button', { class: 'btn', onClick: () => cmd('next') }, ic('skip'), t('Завершить вопрос'))));
+        h('div', { class: 'row end host-acts' },
+          h('button', { class: 'btn', title: t('Добавить 5 секунд'), onClick: () => cmd('addTime') }, ic('clock'), t('+5 с')),
+          h('button', { class: 'btn', onClick: () => cmd('next') }, ic('skip'), t('Завершить вопрос'))));
       return { el, timer, update(x) {
         answered.textContent = `${x.answered} / ${x.eligible}`;
         tug?.set(x.rope);
@@ -195,19 +217,23 @@ export function host(id) {
         h('div', { class: 'row between' }, h('span', { class: 'chip' }, h('span', { class: 'ribbon' }), `${t('Вопрос')} ${st.qi + 1} / ${st.total}`),
           h('div', { style: { fontSize: '20px', fontWeight: 600 } }, `${t('Верно')}: ${r.right} / ${r.answered}`)),
         st.winner && st.mode === 'tug' ? h('div', { class: 'winner' }, h('span', { class: 'ribbon' }), h('h1', null, st.teams[st.winner].name), h('div', { style: { color: 'var(--d-sub)' } }, t('Канат перетянут до конца'))) : null,
-        h('div', { style: { display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(220px, 300px)', gap: '16px', alignItems: 'start' } },
+        st.review ? h('div', { class: 'review-note' }, t('Итоги прошлого вопроса')) : null,
+        h('div', { class: 'reveal-grid' },
           h('div', { class: 'stack' },
             h('div', { class: 'qbox' }, questionEl(q)),
             optionsEl(q, r) || h('div', { class: 'qbox' }, h('div', { class: 'small muted' }, t('Правильный ответ')), h('div', { class: 'rich', style: { fontSize: '2rem', fontWeight: 600 }, html: rich(r.correctText) })),
             r.explain ? h('div', { class: 'rich', style: { fontSize: '18px', color: 'var(--d-sub)' }, html: rich(r.explain) }) : null),
           leaderboard(st.players)),
         tug ? tugBlock() : st.mode === 'duel' ? scoreBar(st).el : null,
-        h('div', { class: 'row end' }, h('button', { class: 'btn primary big', onClick: () => cmd('next') }, last ? t('Итоги') : t('Дальше'), ic('right'))));
+        h('div', { class: 'row end host-acts' },
+          st.qi > 0 ? h('button', { class: 'btn big', onClick: () => cmd('prev') }, ic('left'), t('Назад')) : null,
+          h('button', { class: 'btn primary big', onClick: () => cmd('next') }, st.review ? t('Дальше') : last ? t('Итоги') : t('Следующий вопрос'), ic('right'))));
       return { el };
     },
 
     final(st) {
       const sm = st.summary;
+      seen.clear();
       if (sm.winner === 'draw') sound.draw(); else sound.win();
       if (sm.winner !== 'draw') confetti();
       const teams = sm.teams;
@@ -232,14 +258,19 @@ export function host(id) {
       }
       const el = h('div', { class: 'stack' }, top,
         h('div', { class: 'row', style: { justifyContent: 'center' } },
-          h('a', { class: 'btn primary big', href: `#/t/report/${st.id}` }, ic('chart'), t('Подробный отчёт')),
-          h('a', { class: 'btn big', href: '#/t' }, t('В кабинет'))));
+          h('button', { class: 'btn primary big', onClick: (e) => { e.currentTarget.disabled = true; cmd('again'); } }, ic('play'), t('Сыграть ещё раз')),
+          h('a', { class: 'btn big', href: `#/t/report/${st.id}` }, ic('chart'), t('Подробный отчёт')),
+          h('a', { class: 'btn big', href: '#/t' }, t('В кабинет'))),
+        h('p', { class: 'center', style: { color: 'var(--d-sub)' } }, t('«Сыграть ещё раз» — тот же квиз, ученики перейдут в новую игру сами, PIN вводить не нужно')));
       return { el };
     },
   };
 
-  const loop = setInterval(() => {
+  let raf = 0;
+  const loop = () => {
+    raf = requestAnimationFrame(loop);
     if (!s || s.phase !== 'question' || !view?.timer) { leadin.classList.add('hidden'); return; }
+    const span = (s.deadline - s.opensAt) / 1000;
     const now = conn.now();
     if (now < s.opensAt) {
       const n = Math.ceil((s.opensAt - now) / 1000);
@@ -249,18 +280,20 @@ export function host(id) {
         sound.count();
         fill(leadin, h('div', null, h('div', { style: { fontSize: '24px', fontWeight: 500, color: 'var(--d-sub)' } }, `${t('Вопрос')} ${s.qi + 1}`), h('b', null, n)));
       }
-      view.timer.set(s.question.time, s.question.time);
+      view.timer.set(span, span);
       return;
     }
     if (!leadin.classList.contains('hidden')) { leadin.classList.add('hidden'); sound.go(); }
     const left = (s.deadline - now) / 1000;
-    view.timer.set(left, s.question.time);
+    view.timer.set(left, span);
     const sec = Math.ceil(left);
     if (sec <= 5 && sec > 0 && sec !== lastSec) sound.tick();
     lastSec = sec;
-  }, 150);
+  };
+  loop();
 
   const onKey = (e) => {
+    if (s?.phase === 'reveal' && ['ArrowLeft', 'PageUp'].includes(e.code)) { e.preventDefault(); cmd('prev'); return; }
     if (!s || !['Space', 'Enter', 'ArrowRight', 'PageDown'].includes(e.code) || e.target.closest('input,textarea,button,select')) return;
     e.preventDefault();
     if (s.phase === 'lobby') cmd('start');
@@ -268,6 +301,6 @@ export function host(id) {
     else if (s.phase !== 'final') cmd('next');
   };
   document.addEventListener('keydown', onKey);
-  root.cleanup = () => { conn.close(); clearInterval(loop); document.removeEventListener('keydown', onKey); };
+  root.cleanup = () => { conn.close(); cancelAnimationFrame(raf); document.removeEventListener('keydown', onKey); };
   return root;
 }

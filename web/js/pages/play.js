@@ -1,5 +1,5 @@
 // Экран ученика: вход по PIN, команда, ответы с телефона, результат каждого вопроса и итог.
-import { h, fill, store, go, sound, confetti, ic, icon } from '../core.js';
+import { h, fill, store, go, sound, confetti, ic, icon, DEV } from '../core.js';
 import { t } from '../i18n.js';
 import { page } from '../app.js';
 import { connect } from '../ws.js';
@@ -44,8 +44,7 @@ export function play(pin) {
   const headL = h('div');
   const headR = h('div');
   const body = h('div', { class: 'pbody' });
-  const root = h('div', { class: 'play' }, h('div', { class: 'phead' }, headL, headR), body,
-    h('div', { class: 'dev', style: { textAlign: 'center', padding: '10px', opacity: 0.5 } }, 'Developed by Daniyar'));
+  const root = h('div', { class: 'play' }, h('div', { class: 'phead' }, headL, headR), h('div', { class: 'orn' }), body, h('div', { class: 'dev stage-dev' }, DEV));
   let s = null;
   let key = '';
   let view = null;
@@ -56,7 +55,12 @@ export function play(pin) {
     onOpen: (c) => c.send({ t: 'join', pin, name, token: ls.get(`tq_tok_${pin}`) }),
     onStatus: (ok) => { root.style.filter = ok ? '' : 'grayscale(.6)'; },
     onMessage: (m) => {
-      if (m.t === 'joined') return ls.set(`tq_tok_${pin}`, m.token);
+      if (m.t === 'joined') {
+        ls.set(`tq_tok_${m.pin}`, m.token);
+        // Учитель нажал «Сыграть ещё раз»: переходим в новую игру с тем же именем.
+        if (m.pin !== pin) { sessionStorage.setItem('tq_join_name', name); go(`#/join/${m.pin}`); }
+        return;
+      }
       if (m.t === 'error') {
         root.cleanup();
         const msg = { nopin: t('Игра с таким PIN не найдена. Проверьте код на доске.'), name: t('Введите имя (минимум 2 буквы)'), full: t('В игре уже слишком много участников') }[m.code] || t('Ошибка');
@@ -95,6 +99,7 @@ export function play(pin) {
       return h('div', { class: 'opts' }, q.options.map((o, k) => h('button', { class: `opt o${k % 6}`, onClick: (e) => pick(k, e.currentTarget) },
         h('span', { class: 'L' }, L[k]), h('span', { class: 'rich', html: rich(o.text) }), o.image ? h('img', { src: o.image, alt: '' }) : null)));
     }
+    if (q.type === 'match') return matchUi(q, pick);
     if (q.type === 'truefalse') {
       return h('div', { class: 'opts' }, h('button', { class: 'opt o3', onClick: (e) => pick(true, e.currentTarget) }, h('span', { class: 'L' }, '✓'), t('Верно')),
         h('button', { class: 'opt o0', onClick: (e) => pick(false, e.currentTarget) }, h('span', { class: 'L' }, '✗'), t('Неверно')));
@@ -104,6 +109,24 @@ export function play(pin) {
     setTimeout(() => inp.focus(), 50);
     return h('form', { class: 'stack', onSubmit: (e) => { e.preventDefault(); if (inp.value.trim()) pick(inp.value.trim()); } },
       inp, h('button', { class: 'btn primary big', style: { width: '100%' } }, t('Ответить')));
+  }
+
+  // Соответствие на телефоне: для каждой строки слева касанием выбрать букву справа.
+  function matchUi(q, pick) {
+    const choice = q.left.map(() => null);
+    const send = h('button', { class: 'btn primary big', style: { width: '100%' }, disabled: true,
+      onClick: () => pick(choice) }, t('Ответить'));
+    const rows = q.left.map((text, i) => {
+      const btns = q.right.map((_, k) => h('button', { type: 'button', class: 'mpick', 'aria-label': `${i + 1} — ${L[k]}`, onClick: () => {
+        choice[i] = choice[i] === k ? null : k;
+        btns.forEach((b, j) => b.classList.toggle('on', choice[i] === j));
+        send.disabled = choice.some((c) => c === null);
+      } }, L[k]));
+      return h('div', { class: 'mq' }, h('div', { class: 'mq-l' }, h('span', { class: 'L' }, i + 1), h('span', { class: 'rich', html: rich(text) })), h('div', { class: 'mq-r' }, btns));
+    });
+    return h('div', { class: 'stack' },
+      h('div', { class: 'card match-key' }, q.right.map((text, k) => h('div', { class: 'mrow' }, h('span', { class: 'L' }, L[k]), h('span', { class: 'rich', html: rich(text) })))),
+      rows, send);
   }
 
   function build(st) {
@@ -167,17 +190,24 @@ export function play(pin) {
     }
   }
 
-  const loop = setInterval(() => {
+  let raf = 0;
+  const loop = () => {
+    raf = requestAnimationFrame(loop);
     if (!s || s.phase !== 'question' || !view?.bar) return;
     const now = conn.now();
     if (now < s.opensAt) {
-      fill(view.lead, h('div', { style: { color: 'var(--d-sub)' } }, t('Приготовься')), h('div', { class: 'big-mark text', style: { color: 'var(--ribbon)' } }, Math.ceil((s.opensAt - now) / 1000)));
+      const n = String(Math.ceil((s.opensAt - now) / 1000));
+      if (view.lead.dataset.n !== n) {
+        view.lead.dataset.n = n;
+        fill(view.lead, h('div', { style: { color: 'var(--d-sub)' } }, t('Приготовься')), h('div', { class: 'big-mark text', style: { color: 'var(--ribbon)' } }, n));
+      }
       return;
     }
-    if (view.area.classList.contains('hidden')) { fill(view.lead, ); view.area.classList.remove('hidden'); }
-    view.bar.style.transform = `scaleX(${Math.max(0, (s.deadline - now) / (s.question.time * 1000))})`;
-  }, 100);
+    if (view.area.classList.contains('hidden')) { fill(view.lead); view.area.classList.remove('hidden'); }
+    view.bar.style.transform = `scaleX(${Math.min(1, Math.max(0, (s.deadline - now) / (s.deadline - s.opensAt)))})`;
+  };
+  loop();
 
-  root.cleanup = () => { conn.close(); clearInterval(loop); };
+  root.cleanup = () => { conn.close(); cancelAnimationFrame(raf); };
   return root;
 }

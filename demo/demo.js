@@ -52,7 +52,7 @@ function setup() {
       line('Для победы нужен перевес', seg('margin', [5, 8, 10, 15], (v) => `${v}`)),
       h('div', { style: { borderRadius: '14px', overflow: 'hidden' } }, tug.el)),
     h('p', { class: 'small muted center', style: { marginTop: '16px' } }, t('Полная версия: аккаунты, свои квизы, игра с телефонов по PIN — работает на сервере.')),
-    h('p', { class: 'small muted center' }, 'Developed by Daniyar')));
+    h('p', { class: 'small muted center' }, 'Developed by Daniyar Dauletuly')));
 }
 
 let current;
