@@ -3,6 +3,8 @@
 // Порядок «Фамилия Имя» тоже подходит. Латиница переводится в кириллицу, близкие написания (Даниар/Данияр)
 // принимаются с одной опечаткой. Используется и в браузере, и на сервере.
 
+import { CYR, LAT } from './names-data.js';
+
 const NAMES = `
 абай абдулла абзал абылай абылайхан адиль адильбек адилет азамат айбар айбек айбол айдар айдос айдын айтуар айтжан айсултан айсар акжол акылбек
 алдияр алибек алихан алишер алмас алмат алтай алтынбек алпамыс амангельды аманжол андас ануар ансар арген арлан арман арнур арсен арслан асан асет
@@ -46,7 +48,7 @@ const NAMES = `
 адам алан амир амира ариана бен дэвид даниэль даниэла джон эмма лиам ной майкл оливер оливия ричард том эдвард эмили самир самира рамина
 али ахмед иса муса марьям мариям нур рахим салим карим рашид хусейн халид асия захра сафия сумая хава хафса имран адем ясин яхья абдурахман
 зейнеп зейнаб хадиджа айлана милена ариана эмир эмин алия
-багдат баглан куандык канагат саят сункар нургиса бакдаулет ерсин мирхан ербакыт нурбек ернат жанболат кемелбек токтар тохтар ыклас ихлас
+влада фарахназ нигора багдат баглан куандык канагат саят сункар нургиса бакдаулет ерсин мирхан ербакыт нурбек ернат жанболат кемелбек токтар тохтар ыклас ихлас
 елмурат еркеш абилмансур ербулан байжан бекмурат сырымбет арыстан арыстанбек жандар бекназар рахат рахымжан батырбек асылбек нурмахан мухаметали
 бахытжан ербулат жанибек жаслан кайрат мейрамбек нурасыл серикжан тимурлан шынгысхан абдулазиз абильмансур ахмедияр бекасыл кабдулла сайын
 дамели дильдора ханзада актоты аксая нурсая жасмин акбопе айбиби асемай айжулдыз айганша сандугаш карлыгаш балауса аягоз гульзада зейнегуль
@@ -61,7 +63,7 @@ const SUFFIXES = ['жан', 'бек', 'гуль', 'гул', 'нур', 'бол', 
 const BAD_WORDS = `скибиди скебоб скибидишка скибидибоп сигма туалет тралалело тралалела бомбардиро крокодило тунг сахур пупа лупа абоба амогус сус
 бобр курва лох чмо дебил идиот дурак тупой бот админ нуб нубик про игрок плеер юзер тест аноним никто хз капибара пельмень шрек наруто гоку пикачу
 спанчбоб губка бэтмен джокер мистер бист сосиска какашка гитлер кринж краш рофл лол кек чел братан бро зверь котик кот собака пес гей лесби
-путин`.split(/\s+/);
+кошка кошечка собачка зайка хомяк тигр лев волк дракон`.split(/\s+/);
 // Корни мата: ищутся внутри слова.
 const BAD_ROOTS = ['хуй', 'хуе', 'хуё', 'хуя', 'пизд', 'ебан', 'ебал', 'ебат', 'ебуч', 'ёбан', 'блят', 'бляд', 'мудак', 'мудил', 'залуп', 'гандон', 'шлюх', 'пидор', 'пидар',
   'дроч', 'говн', 'жопа', 'жопу', 'сучк', 'сучар', 'fuck', 'shit', 'bitch', 'dick', 'porn', 'nigg', 'кутак', 'котак', 'сигем', 'амынды', 'анасын', 'naxui', 'nahui'];
@@ -72,7 +74,8 @@ const LAT1 = { a: 'а', b: 'б', c: 'к', d: 'д', e: 'е', f: 'ф', g: 'г', h:
 
 /** Слово → упрощённая кириллица без казахских букв, мягкого знака и двойных букв. */
 export function norm(word) {
-  let w = String(word).toLowerCase().replace(/['’`-]/g, '');
+  let w = String(word).toLowerCase().replace(/['’`-]/g, '').replace(/ç/g, 'ch').replace(/ş/g, 'sh').replace(/ğ/g, 'g').replace(/ı/g, 'i').replace(/ø/g, 'o').replace(/đ/g, 'd');
+  w = w.normalize('NFD').replace(/[̀-ͯ]/g, '');
   for (const [a, b] of LAT2) w = w.split(a).join(b);
   w = w.replace(/[a-z]/g, (c) => LAT1[c]);
   w = w.replace(/[әқғңөұүһіёйьъэ]/g, (c) => KZ[c]);
@@ -81,7 +84,12 @@ export function norm(word) {
 
 const ROOTS_N = ROOTS.map(norm);
 const SUFFIXES_N = new Set(SUFFIXES.map(norm));
-const DICT = new Set(NAMES.split(/\s+/).filter(Boolean).map(norm));
+const words = (text) => text.split('\n').filter((l) => !l.trim().startsWith('#')).join(' ').split(/\s+/).filter(Boolean);
+const DICT = new Set([...NAMES.split(/\s+/), ...words(CYR), ...words(LAT)].filter(Boolean).map(norm));
+/** Латиница без диакритики: Şeyma → seyma, Nguyễn → nguyen, Bo-ram → boram. */
+const fold = (w) => String(w).toLowerCase().replace(/ç/g, 'c').replace(/ş/g, 's').replace(/ğ/g, 'g').replace(/ı/g, 'i').replace(/ø/g, 'o').replace(/đ/g, 'd')
+  .normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[-'’]/g, '');
+const LATSET = new Set(words(LAT).map(fold));
 const BAD = new Set(BAD_WORDS.filter(Boolean).map(norm));
 const BYLEN = new Map();
 for (const n of DICT) { if (!BYLEN.has(n.length)) BYLEN.set(n.length, []); BYLEN.get(n.length).push(n); }
@@ -100,6 +108,7 @@ function near1(a, b) {
 
 const isName = (raw) => String(raw).split(/[-'’]/).some(isOneName);
 const isOneName = (raw) => {
+  if (/^[A-Za-zÀ-ɏḀ-ỿ'’-]+$/.test(raw) && LATSET.has(fold(raw))) return true;
   const w = norm(raw);
   if (w.length < 2) return false;
   if (DICT.has(w)) return true;
@@ -110,7 +119,7 @@ const isOneName = (raw) => {
     if (rest.length >= 2 && (SUFFIXES_N.has(rest) || DICT.has(rest))) return true;
   }
   // Одна опечатка или другое написание — для имён от 4 букв
-  if (w.length >= 4) for (const L of [w.length - 1, w.length, w.length + 1]) for (const n of BYLEN.get(L) || []) if (n.length >= 4 && near1(w, n)) return true;
+  if (w.length >= 5) for (const L of [w.length - 1, w.length, w.length + 1]) for (const n of BYLEN.get(L) || []) if (n.length >= 5 && near1(w, n)) return true;
   return false;
 };
 
@@ -118,10 +127,11 @@ const VOWELS = /[аеиоуыэюяaeiouy]/;
 const isBad = (raw) => {
   const low = String(raw).toLowerCase().replace(/ё/g, 'е');
   const w = norm(raw);
-  return BAD.has(w) || BAD_ROOTS.some((r) => low.includes(r) || w.includes(norm(r)));
+  const lat = fold(raw);
+  return BAD.has(w) || BAD_ROOTS.some((r) => (/^[a-z]+$/.test(r) ? lat.includes(r) : low.includes(r) || w.includes(norm(r))));
 };
 // Фамилия или отчество: только буквы и дефис, есть гласные, нет «ааааа» и мемов.
-const isPlain = (raw) => /^[A-Za-zА-Яа-яЁёӘәҚқҒғҢңӨөҰұҮүҺһІі]+(?:[-'’][A-Za-zА-Яа-яЁёӘәҚқҒғҢңӨөҰұҮүҺһІі]+)*$/.test(raw)
+const isPlain = (raw) => /^[A-Za-zÀ-ɏḀ-ỿЀ-ӿ]+(?:[-'’][A-Za-zÀ-ɏḀ-ỿЀ-ӿ]+)*$/.test(raw)
   && raw.length >= 2 && raw.length <= 30 && VOWELS.test(norm(raw)) && !/(.)\1\1/i.test(raw) && !/[бвгджзйклмнпрстфхцчшщbcdfghjklmnpqrstvwxz]{5}/i.test(raw);
 
 const cap = (w) => w.split(/([-'’])/).map((p) => (p.length > 1 || /[^-'’]/.test(p) ? p.charAt(0).toUpperCase() + p.slice(1).toLowerCase() : p)).join('');
