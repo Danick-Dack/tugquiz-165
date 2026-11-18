@@ -54,7 +54,12 @@ echo "== Приложение (порт $PORT)"
 id tugquiz >/dev/null 2>&1 || useradd --system --home "$DATA_DIR" --shell /usr/sbin/nologin tugquiz
 mkdir -p "$DATA_DIR"
 chown -R tugquiz:tugquiz "$DATA_DIR"
-chmod -R a+rX "$APP_DIR"
+# База (хеши паролей, ключ ИИ) — только для службы: другие программы и сайты на сервере её не прочитают.
+chmod 700 "$DATA_DIR"
+find "$DATA_DIR" -maxdepth 1 -type f -name 'tugquiz.db*' -exec chmod 600 {} +
+# Код читают все, а менять может только root (служба не перепишет сама себя, даже если её взломают).
+chown -R root:root "$APP_DIR"
+chmod -R u=rwX,go=rX "$APP_DIR"
 cd "$APP_DIR"
 npm ci --omit=dev --no-audit --no-fund
 
@@ -70,9 +75,32 @@ Environment=NODE_ENV=production PORT=$PORT HOST=127.0.0.1 TQ_DATA=$DATA_DIR
 ExecStart=$(command -v node) server/index.js
 Restart=always
 RestartSec=3
+# Песочница: служба видит только свой код (чтение) и папку данных (запись), без прав root и доступа к чужому.
+UMask=0077
 NoNewPrivileges=true
-ProtectSystem=full
+ProtectSystem=strict
 ReadWritePaths=$DATA_DIR
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+LockPersonality=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX AF_NETLINK
+CapabilityBoundingSet=
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+MemoryMax=1G
+TasksMax=200
+LimitNOFILE=8192
 
 [Install]
 WantedBy=multi-user.target
@@ -94,19 +122,38 @@ server {
   listen 80;
   listen [::]:80;
   server_name $DOMAIN;
+  server_tokens off;
   client_max_body_size 60m;
+  client_header_timeout 20s;
+  large_client_header_buffers 4 16k;
+  limit_conn tq_conn 1500;
+  # Вход и регистрация: не больше 30 попыток в минуту с одного адреса (школа за одним Wi-Fi укладывается).
+  location ~ ^/api/(login|register)\$ {
+    limit_req zone=tq_auth burst=30 nodelay;
+    limit_req_status 429;
+    include snippets/tugquiz-proxy.conf;
+  }
   location / {
-    proxy_pass http://127.0.0.1:$PORT;
-    proxy_http_version 1.1;
-    proxy_set_header Host \$host;
-    proxy_set_header X-Real-IP \$remote_addr;
-    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-    proxy_set_header X-Forwarded-Proto \$scheme;
-    proxy_set_header Upgrade \$http_upgrade;
-    proxy_set_header Connection \$connection_upgrade;
-    proxy_read_timeout 3600s;
+    include snippets/tugquiz-proxy.conf;
   }
 }
+EOF
+  mkdir -p /etc/nginx/snippets
+  # IP клиента nginx пишет сам и затирает то, что прислал клиент: подделать адрес и обойти лимиты нельзя.
+  cat > /etc/nginx/snippets/tugquiz-proxy.conf <<EOF
+proxy_pass http://127.0.0.1:$PORT;
+proxy_http_version 1.1;
+proxy_set_header Host \$host;
+proxy_set_header X-Real-IP \$remote_addr;
+proxy_set_header X-Forwarded-For \$remote_addr;
+proxy_set_header X-Forwarded-Proto \$scheme;
+proxy_set_header Upgrade \$http_upgrade;
+proxy_set_header Connection \$connection_upgrade;
+proxy_read_timeout 3600s;
+EOF
+  cat > /etc/nginx/conf.d/tugquiz-limits.conf <<'EOF'
+limit_req_zone $binary_remote_addr zone=tq_auth:10m rate=30r/m;
+limit_conn_zone $binary_remote_addr zone=tq_conn:10m;
 EOF
   # Переменная для WebSocket: объявляем один раз (если у сервера её ещё нет).
   if ! grep -rqs 'connection_upgrade' /etc/nginx/nginx.conf /etc/nginx/conf.d /etc/nginx/sites-enabled; then

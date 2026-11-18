@@ -6,6 +6,7 @@ import { randomInt, randomBytes } from 'node:crypto';
 import * as db from './db.js';
 import { checkName } from '../web/js/names.js';
 import { gradeAnswer, normText, points, pull, ropeStep } from './quizlib.js';
+import { clientIp, limiter } from './security.js';
 
 const LEAD_IN = 3000; // «Приготовьтесь» перед открытием ответов, мс
 const EXTRA_MAX = 120e3; // сколько всего можно добавить к одному вопросу кнопкой «+5 с», мс
@@ -437,17 +438,44 @@ setInterval(() => {
   }
 }, 600e3).unref();
 
+// Защита сокетов: за школьным Wi-Fi сотни учеников могут делить один IP, поэтому лимиты щедрые.
+const MAX_PER_IP = 700; // одновременных соединений с одного адреса
+const conns = new Map();
+const pinMisses = limiter(60, 10 * 60e3); // неверные PIN с одного адреса (против подбора)
+
 export function attachSockets(server, userFromReq) {
-  const wss = new WebSocketServer({ server, path: '/ws', maxPayload: 16 * 1024 });
+  const wss = new WebSocketServer({
+    server, path: '/ws', maxPayload: 16 * 1024, perMessageDeflate: false,
+    // Соединение только со страниц нашего сайта (защита от чужих сайтов, открывающих сокет от имени ученика).
+    verifyClient: ({ req }) => {
+      const o = req.headers.origin;
+      if (o) { try { if (new URL(o).host !== req.headers.host) return false; } catch { return false; } }
+      return (conns.get(clientIp(req)) || 0) < MAX_PER_IP;
+    },
+  });
   wss.on('error', () => {}); // ошибки порта обрабатывает HTTP-сервер (server/index.js)
   wss.on('connection', (ws, req) => {
+    const ip = clientIp(req);
+    conns.set(ip, (conns.get(ip) || 0) + 1);
     const user = userFromReq(req);
     let misses = 0;
+    let tokens = 40; // ведро: до 40 сообщений сразу, пополняется на 10 в секунду
+    let last = Date.now();
     ws.alive = true;
+    ws.on('error', () => {});
     ws.on('pong', () => { ws.alive = true; });
+    ws.on('close', () => { const n = (conns.get(ip) || 1) - 1; if (n > 0) conns.set(ip, n); else conns.delete(ip); });
     ws.on('message', (raw) => {
+      const t = Date.now();
+      tokens = Math.min(40, tokens + ((t - last) / 1000) * 10);
+      last = t;
+      if (--tokens < 0) { if (tokens < -40) ws.terminate(); return; }
+      try { onMessage(raw); } catch (e) { console.error('ws', e); }
+    });
+    const onMessage = (raw) => {
       let m;
       try { m = JSON.parse(raw); } catch { return; }
+      if (!m || typeof m !== 'object' || Array.isArray(m)) return;
       if (m.t === 'ping') return send(ws, { t: 'pong', now: Date.now() });
       if (m.t === 'host') {
         const g = byId.get(Number(m.id));
@@ -458,16 +486,19 @@ export function attachSockets(server, userFromReq) {
         return send(ws, g.hostState());
       }
       if (m.t === 'join') {
-        const g = byPin.get(String(m.pin || '').trim());
+        if (ws.player || ws.isHost) return; // одно соединение — одна роль
+        if (pinMisses.blocked(ip)) return send(ws, { t: 'error', code: 'nopin' });
+        const g = byPin.get(String(m.pin || '').trim().slice(0, 10));
         if (!g) {
+          pinMisses.add(ip);
           if (++misses > 15) ws.close();
           return send(ws, { t: 'error', code: 'nopin' });
         }
-        return g.join(ws, { name: m.name, token: m.token, user: user?.role === 'student' ? user : null });
+        return g.join(ws, { name: String(m.name ?? '').slice(0, 60), token: typeof m.token === 'string' ? m.token : null, user: user?.role === 'student' ? user : null });
       }
       if (ws.isHost) ws.game.onHost(m);
       else if (ws.player && ws.game.players.has(ws.player.id)) ws.game.onPlayer(ws.player, m);
-    });
+    };
     ws.on('close', () => ws.game?.leave(ws));
   });
   setInterval(() => {

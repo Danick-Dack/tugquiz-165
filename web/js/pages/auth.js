@@ -60,7 +60,7 @@ export function register(role = 'student') {
   const isT = setup || role === 'teacher';
   const name = h('input', { class: 'input', autocomplete: 'name', required: true, placeholder: isT ? t('Например: Айгуль Серикбаевна') : t('Имя и фамилия') });
   const lg = h('input', { class: 'input', autocomplete: 'username', required: true, pattern: '[A-Za-z0-9_.\\-]{3,32}', placeholder: 'aigul.s' });
-  const pw = h('input', { class: 'input', type: 'password', autocomplete: 'new-password', required: true, minLength: 6 });
+  const pw = h('input', { class: 'input', type: 'password', autocomplete: 'new-password', required: true, minLength: 8, maxLength: 128 });
   const invite = h('input', { class: 'input', placeholder: 'SL165-0000' });
   const cls = classPicker();
   const guard = isT ? null : guardName(name);
@@ -85,7 +85,7 @@ export function register(role = 'student') {
       guard?.err,
       isT ? null : field(t('Класс'), cls),
       field(t('Логин'), lg, t('Латиницей, 3–32 символа')),
-      field(t('Пароль'), pw, t('Минимум 6 символов')),
+      field(t('Пароль'), pw, t('Минимум 8 символов, не только цифры')),
       isT && !setup ? field(t('Код учителя'), invite, t('Код выдаёт администратор сайта')) : null,
       h('button', { class: 'btn primary big', style: { width: '100%' } }, t('Создать аккаунт'))),
     h('div', { class: 'small muted center' }, t('Уже есть аккаунт?'), ' ', h('a', { href: '#/login' }, t('Войти'))));

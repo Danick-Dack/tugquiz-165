@@ -160,7 +160,7 @@ export function settings() {
   const me = store.me;
   const name = h('input', { class: 'input', value: me.name });
   const oldPw = h('input', { class: 'input', type: 'password', autocomplete: 'current-password' });
-  const newPw = h('input', { class: 'input', type: 'password', autocomplete: 'new-password', minLength: 6 });
+  const newPw = h('input', { class: 'input', type: 'password', autocomplete: 'new-password', minLength: 8, maxLength: 128 });
   const saveName = async () => {
     try { store.me = (await api('/api/me', { method: 'PATCH', body: { name: name.value } })).user; toast(t('Сохранено')); render(); } catch (e) { toastErr(e); }
   };
@@ -223,7 +223,7 @@ export async function admin() {
         ['student', 'teacher', 'admin'].map((r) => h('option', { value: r, selected: r === u.role }, t({ admin: 'админ', teacher: 'учитель', student: 'ученик' }[r])))) : null)));
   const patchUser = async (u, body) => { try { await api(`/api/admin/users/${u.id}`, { method: 'PATCH', body }); toast(t('Сохранено')); render(); } catch (e) { toastErr(e); } };
   const resetPw = (u) => {
-    const pw = h('input', { class: 'input', value: Math.random().toString(36).slice(2, 10) });
+    const pw = h('input', { class: 'input', value: [...crypto.getRandomValues(new Uint8Array(10))].map((b) => 'abcdefghjkmnpqrstuvwxyz23456789'[b % 31]).join('') });
     modal({ title: `${t('Новый пароль')}: ${u.name}`, body: h('div', { class: 'stack' }, pw, h('p', { class: 'small muted' }, t('Передайте пароль лично. Все входы пользователя будут сброшены.'))),
       actions: [{ label: t('Отмена'), kind: 'ghost' }, { label: t('Сохранить'), kind: 'primary', onClick: async () => { await api(`/api/admin/users/${u.id}`, { method: 'PATCH', body: { password: pw.value } }); await copyText(pw.value); } }] });
   };

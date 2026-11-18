@@ -11,9 +11,14 @@ import * as db from './db.js';
 import { meta, isClass, SUBJECTS, CUSTOM_COLORS } from './constants.js';
 import { normalizeQuiz } from './quizlib.js';
 import { buildPrompt, buildPackPrompt, parseAiText, callAi } from './ai.js';
-import { hashPassword, checkPassword, newSession, dropSession, userByToken, publicUser, sessionCookie, readCookie } from './auth.js';
+import { hashPassword, checkPassword, newSession, dropSession, dropOtherSessions, userByToken, publicUser, sessionCookie, readCookie } from './auth.js';
 import { createGame, attachSockets, byId } from './game.js';
 import { checkName, NAME_ERROR } from '../web/js/names.js';
+import { clientIp, limiter, safeEqual, weakPassword, sameOrigin, applySecurityHeaders, audit, publicHttpsUrl } from './security.js';
+
+// Ни одна ошибка не должна ронять сервер: пишем в журнал и продолжаем работать.
+process.on('uncaughtException', (e) => console.error('uncaughtException', e));
+process.on('unhandledRejection', (e) => console.error('unhandledRejection', e));
 
 const PORT = Number(process.env.PORT) || 8080;
 const WEB = path.join(db.ROOT, 'web');
@@ -26,9 +31,22 @@ const TYPES = {
 const CSP = [
   "default-src 'self'", "script-src 'self'", "style-src 'self' 'unsafe-inline'",
   "font-src 'self' data:", "img-src 'self' data: blob: https:", "media-src 'self' blob: https:",
-  'frame-src https://www.youtube-nocookie.com https://www.youtube.com https://player.vimeo.com', "connect-src 'self' ws: wss:",
-  "object-src 'none'", "base-uri 'self'", "frame-ancestors 'self'",
+  'frame-src https://www.youtube-nocookie.com https://player.vimeo.com', "connect-src 'self' {WS}",
+  "object-src 'none'", "base-uri 'self'", "form-action 'self'", "frame-ancestors 'self'",
 ].join('; ');
+// На загруженные файлы, открытые напрямую, скрипты не действуют вообще.
+const UPLOAD_CSP = "default-src 'none'; img-src 'self'; media-src 'self'; style-src 'unsafe-inline'; sandbox";
+
+// Ограничители частоты (по IP клиента; за школьным Wi-Fi много учеников делят один адрес, поэтому числа щедрые).
+const apiLimit = limiter(1500, 60e3); // любые запросы к API
+const loginIpFails = limiter(40, 10 * 60e3); // неудачные входы с одного IP
+const loginUserFails = limiter(20, 15 * 60e3); // неудачные входы в один аккаунт (против подбора с разных IP)
+const registerLimit = limiter(80, 3600e3); // регистрации с одного IP
+const inviteIpFails = limiter(8, 3600e3); // неверные коды учителя с одного IP
+const inviteAllFails = limiter(80, 3600e3); // и вообще по всему сайту
+const uploadLimit = limiter(60, 3600e3); // загрузок файлов от одного учителя
+const aiLimit = limiter(30, 3600e3); // запросов к ИИ от одного учителя
+const liveLimit = 15; // одновременных игр у одного ведущего
 
 class HttpError extends Error { constructor(status, message) { super(message); this.status = status; } }
 const fail = (status, message) => { throw new HttpError(status, message); };
@@ -41,6 +59,7 @@ const needAdmin = (u) => u?.role === 'admin' || fail(403, 'Только для �
 const isSecure = (req) => req.headers['x-forwarded-proto'] === 'https';
 
 async function readJson(req, limit = 1_000_000) {
+  if (Number(req.headers['content-length']) > limit) fail(413, 'Слишком большой запрос');
   let size = 0;
   const chunks = [];
   for await (const c of req) {
@@ -49,17 +68,21 @@ async function readJson(req, limit = 1_000_000) {
     chunks.push(c);
   }
   if (!size) return {};
-  try { return JSON.parse(Buffer.concat(chunks)); } catch { fail(400, 'Неверный JSON'); }
+  let data;
+  try { data = JSON.parse(Buffer.concat(chunks)); } catch { fail(400, 'Неверный JSON'); }
+  if (!data || typeof data !== 'object' || Array.isArray(data)) fail(400, 'Неверный запрос');
+  return data;
 }
 
 // ---------- защита входа от перебора ----------
-const attempts = new Map();
-function loginGuard(req) {
-  const ip = req.headers['x-forwarded-for']?.split(',')[0].trim() || req.socket.remoteAddress;
-  const list = (attempts.get(ip) || []).filter((t) => Date.now() - t < 10 * 60e3);
-  attempts.set(ip, list);
-  if (list.length >= 10) fail(429, 'Слишком много попыток. Подождите 10 минут.');
-  return () => list.push(Date.now());
+function loginGuard(req, login) {
+  const ip = clientIp(req);
+  const key = str(login, 32).toLowerCase();
+  if (loginIpFails.blocked(ip) || loginUserFails.blocked(key)) { audit('login-blocked', req, `login=${key}`); fail(429, 'Слишком много попыток. Подождите 15 минут.'); }
+  return {
+    failed: () => { loginIpFails.add(ip); loginUserFails.add(key); audit('login-fail', req, `login=${key}`); },
+    ok: () => loginUserFails.reset(key),
+  };
 }
 
 // ---------- квизы ----------
@@ -84,7 +107,8 @@ const SIGS = [
   ['.webm', (b) => b.subarray(0, 4).equals(Buffer.from([0x1a, 0x45, 0xdf, 0xa3]))],
 ];
 
-async function upload(req, kind) {
+async function upload(req, kind, user) {
+  if (!uploadLimit.hit(user.id)) fail(429, 'Слишком много загрузок. Попробуйте через час.');
   const limit = kind === 'video' ? 50 * 1024 * 1024 : 5 * 1024 * 1024;
   if (Number(req.headers['content-length']) > limit) fail(413, kind === 'video' ? 'Видео больше 50 МБ' : 'Картинка больше 5 МБ');
   const tmp = path.join(db.UPLOADS, `tmp-${randomBytes(8).toString('hex')}`);
@@ -138,6 +162,8 @@ on('POST', '/api/subjects', ({ user, body }) => {
 });
 
 on('POST', '/api/register', async ({ body, req, res }) => {
+  const ip = clientIp(req);
+  if (!registerLimit.hit(ip)) { audit('register-flood', req); fail(429, 'Слишком много регистраций с этого адреса. Попробуйте позже.'); }
   const first = !db.one('SELECT 1 FROM users');
   const role = first ? 'admin' : body.role === 'teacher' ? 'teacher' : 'student';
   const login = str(body.login, 32);
@@ -146,9 +172,14 @@ on('POST', '/api/register', async ({ body, req, res }) => {
   const password = String(body.password || '');
   if (!/^[a-zA-Z0-9_.-]{3,32}$/.test(login)) fail(400, 'Логин: 3–32 латинских буквы, цифры, точка, _ или -');
   if (name.length < 2) fail(400, 'Введите имя');
-  if (password.length < 6) fail(400, 'Пароль — минимум 6 символов');
-  if (role === 'teacher' && str(body.invite).toUpperCase() !== String(db.getSetting('invite_code')).toUpperCase()) {
-    fail(403, 'Неверный код учителя. Его выдаёт администратор.');
+  const weak = weakPassword(password, login);
+  if (weak) fail(400, weak);
+  if (role === 'teacher') {
+    if (inviteIpFails.blocked(ip) || inviteAllFails.blocked('all')) { audit('invite-blocked', req); fail(429, 'Слишком много неверных кодов. Попробуйте через час.'); }
+    if (!safeEqual(str(body.invite).toUpperCase(), String(db.getSetting('invite_code')).toUpperCase())) {
+      inviteIpFails.add(ip); inviteAllFails.add('all'); audit('invite-fail', req);
+      fail(403, 'Неверный код учителя. Его выдаёт администратор.');
+    }
   }
   const cls = role === 'student' ? str(body.class_name, 4).toUpperCase() : '';
   if (role === 'student' && !isClass(cls)) fail(400, 'Выберите класс');
@@ -160,10 +191,11 @@ on('POST', '/api/register', async ({ body, req, res }) => {
 });
 
 on('POST', '/api/login', async ({ body, req, res }) => {
-  const failed = loginGuard(req);
+  const guard = loginGuard(req, body.login);
   const u = db.one('SELECT * FROM users WHERE login=?', str(body.login, 32));
-  if (!u || !(await checkPassword(String(body.password || ''), u.pass))) { failed(); fail(401, 'Неверный логин или пароль'); }
+  if (!(await checkPassword(String(body.password ?? ''), u?.pass)) || !u) { guard.failed(); fail(401, 'Неверный логин или пароль'); }
   if (!u.active) fail(403, 'Аккаунт отключён администратором');
+  guard.ok();
   res.setHeader('Set-Cookie', sessionCookie(newSession(u.id), isSecure(req)));
   return { user: publicUser(u) };
 });
@@ -174,7 +206,7 @@ on('POST', '/api/logout', ({ req, res }) => {
   return { ok: true };
 });
 
-on('PATCH', '/api/me', async ({ user, body }) => {
+on('PATCH', '/api/me', async ({ user, body, req }) => {
   user || fail(401, 'Войдите в аккаунт');
   if (body.name !== undefined) {
     let name = str(body.name, 60);
@@ -189,10 +221,13 @@ on('PATCH', '/api/me', async ({ user, body }) => {
   }
   if (body.tour_done !== undefined) db.run('UPDATE users SET tour_done=? WHERE id=?', body.tour_done ? 1 : 0, user.id);
   if (body.password) {
+    if (!loginUserFails.hit(`pw:${user.id}`)) fail(429, 'Слишком много попыток. Подождите 15 минут.');
     const row = db.one('SELECT pass FROM users WHERE id=?', user.id);
     if (!(await checkPassword(String(body.oldPassword || ''), row.pass))) fail(403, 'Старый пароль неверный');
-    if (String(body.password).length < 6) fail(400, 'Пароль — минимум 6 символов');
+    const weak = weakPassword(body.password, user.login);
+    if (weak) fail(400, weak);
     db.run('UPDATE users SET pass=? WHERE id=?', await hashPassword(String(body.password)), user.id);
+    dropOtherSessions(user.id, readCookie(req, 'sid')); // со всех других устройств выходим
   }
   return { user: publicUser(db.one('SELECT * FROM users WHERE id=?', user.id)) };
 });
@@ -242,7 +277,7 @@ on('POST', '/api/quizzes/(\\d+)/copy', ({ user, params }) => {
   return { id: Number(id) };
 });
 
-on('POST', '/api/upload', ({ user, req, url }) => (needTeacher(user), upload(req, url.searchParams.get('kind') === 'video' ? 'video' : 'image')));
+on('POST', '/api/upload', ({ user, req, url }) => (needTeacher(user), upload(req, url.searchParams.get('kind') === 'video' ? 'video' : 'image', user)));
 
 // ---------- ИИ ----------
 const aiConf = () => db.getSetting('ai', {});
@@ -258,6 +293,7 @@ on('POST', '/api/ai/parse', ({ user, body }) => {
 });
 on('POST', '/api/ai/generate', async ({ user, body }) => {
   needTeacher(user);
+  if (!aiLimit.hit(user.id)) fail(429, 'Слишком много запросов к ИИ. Подождите немного.');
   let text;
   const image = body.image ? String(body.image) : '';
   if (image && !/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(image)) fail(400, 'Фото должно быть JPG, PNG или WebP');
@@ -273,6 +309,7 @@ on('POST', '/api/games', ({ user, body }) => {
   needTeacher(user);
   const quiz = getQuiz(body.quizId, user);
   const mode = ['tug', 'duel', 'solo'].includes(body.mode) ? body.mode : 'tug';
+  if ([...byId.values()].filter((x) => x.hostId === user.id && x.phase !== 'final').length >= liveLimit) fail(429, 'Слишком много незавершённых игр. Завершите старые.');
   const g = createGame({ hostId: user.id, quiz, mode, opts: body.opts || {} });
   return { id: g.id, pin: g.pin };
 });
@@ -318,7 +355,7 @@ on('DELETE', '/api/games/(\\d+)', ({ user, params }) => {
 });
 
 on('GET', '/api/qr', async ({ url, res }) => {
-  const svg = await QRCode.toString(str(url.searchParams.get('text'), 300), { type: 'svg', margin: 1, color: { dark: '#0b3d1f', light: '#ffffff' } });
+  const svg = await QRCode.toString(str(url.searchParams.get('text'), 300) || ' ', { type: 'svg', margin: 1, color: { dark: '#0b3d1f', light: '#ffffff' } });
   res.writeHead(200, { 'Content-Type': 'image/svg+xml', 'Cache-Control': 'public, max-age=86400' });
   res.end(svg);
 });
@@ -359,7 +396,7 @@ on('PUT', '/api/admin/settings', ({ user, body }) => {
   if (body.ai) {
     const old = aiConf();
     const base = str(body.ai.base, 300);
-    if (base && !/^https:\/\//.test(base)) fail(400, 'Адрес API должен начинаться с https://');
+    if (base && !publicHttpsUrl(base)) fail(400, 'Адрес API должен начинаться с https:// и вести на публичный сайт');
     db.setSetting('ai', {
       provider: str(body.ai.provider, 30), base, model: str(body.ai.model, 120),
       key: body.ai.key === undefined ? old.key : str(body.ai.key, 300),
@@ -386,7 +423,8 @@ on('PATCH', '/api/admin/users/(\\d+)', async ({ user, body, params }) => {
   }
   if (['teacher', 'admin', 'student'].includes(body.role)) db.run('UPDATE users SET role=? WHERE id=?', body.role, id);
   if (body.password) {
-    if (String(body.password).length < 6) fail(400, 'Пароль — минимум 6 символов');
+    const weak = weakPassword(body.password);
+    if (weak) fail(400, weak);
     db.run('UPDATE users SET pass=? WHERE id=?', await hashPassword(String(body.password)), id);
     db.run('DELETE FROM sessions WHERE user_id=?', id);
   }
@@ -394,7 +432,7 @@ on('PATCH', '/api/admin/users/(\\d+)', async ({ user, body, params }) => {
 });
 
 // ---------- статика ----------
-function serveFile(req, res, file, immutable) {
+function serveFile(req, res, file, immutable, extra = {}) {
   let st;
   try { st = statSync(file); } catch { st = null; }
   if (!st?.isFile()) {
@@ -402,44 +440,65 @@ function serveFile(req, res, file, immutable) {
     return res.end('Не найдено');
   }
   const type = TYPES[path.extname(file).toLowerCase()] || 'application/octet-stream';
-  const headers = { 'Content-Type': type, 'Cache-Control': immutable ? 'public, max-age=31536000, immutable' : 'no-cache' };
-  const range = req.headers.range?.match(/bytes=(\d*)-(\d*)/);
+  const headers = { 'Content-Type': type, 'Cache-Control': immutable ? 'public, max-age=31536000, immutable' : 'no-cache', ...extra };
+  const stream = (opts) => {
+    const rs = createReadStream(file, opts);
+    rs.on('error', () => res.destroy());
+    res.on('close', () => rs.destroy());
+    rs.pipe(res);
+  };
+  const range = req.headers.range?.match(/^bytes=(\d*)-(\d*)$/);
   if (range && type.startsWith('video/')) {
-    const start = Number(range[1] || 0);
-    const end = Math.min(range[2] ? Number(range[2]) : st.size - 1, st.size - 1);
+    let start; let end;
+    if (range[1] === '' && range[2] !== '') { start = Math.max(0, st.size - Number(range[2])); end = st.size - 1; } // «последние N байт»
+    else { start = Number(range[1] || 0); end = range[2] === '' ? st.size - 1 : Math.min(Number(range[2]), st.size - 1); }
+    if (!Number.isInteger(start) || !Number.isInteger(end) || start > end || start >= st.size) {
+      res.writeHead(416, { 'Content-Range': `bytes */${st.size}` });
+      return res.end();
+    }
     res.writeHead(206, { ...headers, 'Content-Range': `bytes ${start}-${end}/${st.size}`, 'Accept-Ranges': 'bytes', 'Content-Length': end - start + 1 });
-    return createReadStream(file, { start, end }).pipe(res);
+    if (req.method === 'HEAD') return res.end();
+    return stream({ start, end });
   }
   res.writeHead(200, { ...headers, 'Content-Length': st.size });
   if (req.method === 'HEAD') return res.end();
-  createReadStream(file).pipe(res);
+  stream();
 }
 
 function serveStatic(req, res, pathname) {
   if (pathname.startsWith('/uploads/')) {
     const name = path.basename(pathname);
-    return serveFile(req, res, path.join(db.UPLOADS, name), true);
+    if (!/^[\w.-]{1,80}$/.test(name) || name.startsWith('tmp-')) { res.writeHead(404); return res.end(); }
+    return serveFile(req, res, path.join(db.UPLOADS, name), true, { 'Content-Security-Policy': UPLOAD_CSP });
   }
-  const rel = path.normalize(decodeURIComponent(pathname === '/' ? '/index.html' : pathname)).replace(/^([/\\])+/, '');
+  let decoded;
+  try { decoded = decodeURIComponent(pathname === '/' ? '/index.html' : pathname); } catch { res.writeHead(400); return res.end(); }
+  if (decoded.includes('\0') || decoded.includes('\\')) { res.writeHead(400); return res.end(); }
+  const rel = path.normalize(decoded).replace(/^([/\\])+/, '');
+  if (rel.split(/[/\\]/).some((part) => part.startsWith('.'))) { res.writeHead(404); return res.end(); } // .git, .env и прочие скрытые файлы
   const file = path.join(WEB, rel);
   if (!file.startsWith(WEB + path.sep)) { res.writeHead(403); return res.end(); }
   serveFile(req, res, file, rel.startsWith('vendor'));
 }
 
-const server = http.createServer(async (req, res) => {
-  res.setHeader('X-Content-Type-Options', 'nosniff');
-  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
-  res.setHeader('Content-Security-Policy', CSP);
-  const url = new URL(req.url, 'http://local');
+async function handle(req, res) {
+  applySecurityHeaders(req, res, { secure: isSecure(req), csp: CSP });
+  let url;
+  try { url = new URL(req.url, 'http://local'); } catch { res.writeHead(400); return res.end(); }
   if (!url.pathname.startsWith('/api/')) {
-    if (req.method !== 'GET' && req.method !== 'HEAD') { res.writeHead(405); return res.end(); }
+    if (req.method !== 'GET' && req.method !== 'HEAD') { res.writeHead(405, { Allow: 'GET, HEAD' }); return res.end(); }
     return serveStatic(req, res, url.pathname);
   }
   try {
+    if (!apiLimit.hit(clientIp(req))) { audit('api-flood', req); fail(429, 'Слишком много запросов. Подождите минуту.'); }
     const route = routes.find(([m, re]) => m === req.method && re.test(url.pathname)) || fail(404, 'Нет такого метода API');
-    // Защита от CSRF: изменяющие запросы принимаем только из нашего же сайта.
-    if (req.method !== 'GET' && req.headers.origin && new URL(req.headers.origin).host !== req.headers.host) fail(403, 'Чужой источник запроса');
-    const body = req.method === 'GET' || url.pathname === '/api/upload' ? {} : await readJson(req, url.pathname === '/api/ai/generate' ? 8e6 : 1e6);
+    const isUpload = url.pathname === '/api/upload';
+    if (req.method !== 'GET') {
+      // Защита от CSRF: изменяющие запросы принимаем только из нашего же сайта.
+      if (!sameOrigin(req)) { audit('csrf', req, `origin=${String(req.headers.origin).slice(0, 80)}`); fail(403, 'Чужой источник запроса'); }
+      if (!isUpload && Number(req.headers['content-length']) > 0 && !/^application\/json\b/i.test(req.headers['content-type'] || '')) fail(415, 'Нужен JSON');
+    }
+    const body = req.method === 'GET' || isUpload ? {} : await readJson(req, url.pathname === '/api/ai/generate' ? 8e6 : 1e6);
     const result = await route[2]({ req, res, url, body, user: userFromReq(req), params: url.pathname.match(route[1]).slice(1) });
     if (!res.headersSent) {
       res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
@@ -448,10 +507,19 @@ const server = http.createServer(async (req, res) => {
   } catch (e) {
     if (!(e instanceof HttpError)) console.error(e);
     if (res.headersSent) return res.end();
-    res.writeHead(e.status || 500, { 'Content-Type': 'application/json; charset=utf-8' });
+    res.writeHead(e.status || 500, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
     res.end(JSON.stringify({ error: e instanceof HttpError ? e.message : 'Ошибка сервера' }));
   }
+}
+
+const server = http.createServer((req, res) => {
+  handle(req, res).catch((e) => { console.error(e); try { if (!res.headersSent) res.writeHead(500); res.end(); } catch { /* сокет уже закрыт */ } });
 });
+server.headersTimeout = 30e3;
+server.requestTimeout = 10 * 60e3; // 50 МБ видео с телефона по слабой сети
+server.maxHeadersCount = 60;
+server.keepAliveTimeout = 5e3;
+server.on('clientError', (e, socket) => { if (socket.writable) socket.end('HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n'); });
 
 attachSockets(server, userFromReq);
 const lanAddresses = () => Object.values(os.networkInterfaces()).flat()

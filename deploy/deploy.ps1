@@ -17,6 +17,18 @@ if (git status --porcelain) { Write-Warning 'Есть незафиксирова
 
 $tar = Join-Path $env:TEMP 'tugquiz.tar'
 git archive --format=tar -o $tar HEAD
+# Фронтенд уходит на сервер сжатым (исходник на сайте нечитаем); без esbuild — как есть.
+if (Test-Path 'node_modules\esbuild') {
+  $stage = Join-Path $env:TEMP 'tugquiz-stage'
+  if (Test-Path $stage) { Remove-Item -Recurse -Force $stage }
+  New-Item -ItemType Directory $stage | Out-Null
+  tar -xf $tar -C $stage
+  node deploy\minify.mjs $stage
+  if ($LASTEXITCODE) { throw 'Не удалось сжать фронтенд.' }
+  Remove-Item $tar
+  tar -cf $tar -C $stage .
+  Remove-Item -Recurse -Force $stage
+} else { Write-Warning 'esbuild не установлен (npm install): фронтенд уйдёт несжатым.' }
 Write-Host '== Отправляю проект на сервер (введите пароль сервера)'
 scp -o StrictHostKeyChecking=accept-new $tar "${Server}:/tmp/tugquiz.tar"
 if ($LASTEXITCODE) { throw 'Не удалось отправить архив. Проверьте адрес, логин и пароль.' }
