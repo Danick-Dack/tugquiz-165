@@ -6,6 +6,8 @@ import { connect } from '../ws.js';
 import { Tug } from '../rope.js';
 import { questionEl, rich } from '../content.js';
 import { pinForm } from './home.js';
+import { guardName } from './auth.js';
+import { NAME_ERROR } from '../names.js';
 
 const L = 'ABCDEF';
 const ls = {
@@ -19,18 +21,22 @@ function joinForm(pin, error) {
       h('h1', null, t('Войти в игру')), h('p', { class: 'muted' }, t('Введите PIN-код с доски')),
       error ? h('p', { style: { color: 'var(--bad)' } }, error) : null, pinForm(true))));
   }
-  const name = h('input', { class: 'input', value: ls.get('tq_name') || '', maxLength: 24, placeholder: t('Имя и фамилия'), required: true, style: { fontSize: '17px' } });
+  const name = h('input', { class: 'input', value: ls.get('tq_name') || '', maxLength: 24, autocomplete: 'name', placeholder: t('Имя и фамилия'), required: true, style: { fontSize: '17px' } });
+  const guard = guardName(name);
   return page(h('div', { class: 'wrap', style: { maxWidth: '440px', paddingTop: '40px' } }, h('div', { class: 'card pad-lg stack' },
     h('h1', null, `${t('Игра')} ${pin}`),
     error ? h('p', { style: { color: 'var(--bad)' } }, error) : null,
     h('form', { class: 'stack', onSubmit: (e) => {
       e.preventDefault();
-      if (name.value.trim().length < 2) return name.focus();
-      ls.set('tq_name', name.value.trim());
-      sessionStorage.setItem('tq_join_name', name.value.trim());
+      const nm = guard.check();
+      if (!nm) return;
+      ls.set('tq_name', nm);
+      sessionStorage.setItem('tq_join_name', nm);
       window.dispatchEvent(new HashChangeEvent('hashchange'));
     } },
-    h('label', { class: 'field' }, h('span', null, t('Как тебя зовут?')), name),
+    h('label', { class: 'field' }, h('span', null, t('Как тебя зовут?')), name,
+      h('div', { class: 'small muted', style: { marginTop: '4px' } }, t('Настоящее имя, можно с фамилией — так тебя увидит учитель'))),
+    guard.err,
     h('button', { class: 'btn primary big', style: { width: '100%' } }, t('Войти в игру'))),
     h('p', { class: 'small muted center' }, t('Есть аккаунт ученика?'), ' ', h('a', { href: '#/login', onClick: () => sessionStorage.setItem('tq_after_login', `#/join/${pin}`) }, t('Войдите')), ' — ', t('очки попадут в рейтинг')))));
 }
@@ -63,7 +69,7 @@ export function play(pin) {
       }
       if (m.t === 'error') {
         root.cleanup();
-        const msg = { nopin: t('Игра с таким PIN не найдена. Проверьте код на доске.'), name: t('Введите имя (минимум 2 буквы)'), full: t('В игре уже слишком много участников') }[m.code] || t('Ошибка');
+        const msg = { nopin: t('Игра с таким PIN не найдена. Проверьте код на доске.'), name: t('Введите имя (минимум 2 буквы)'), badname: t(NAME_ERROR), full: t('В игре уже слишком много участников') }[m.code] || t('Ошибка');
         root.replaceWith(joinForm(m.code === 'nopin' ? '' : pin, msg));
         return;
       }

@@ -43,13 +43,21 @@ function reach(sx, sy, tx, ty, max) {
   return d <= max ? [tx, ty] : [sx + ((tx - sx) / d) * max, sy + ((ty - sy) / d) * max];
 }
 
-// Статичная часть человечка: шапан (в осях торса, бедро в 0,0) и голова с бөріком и үкі.
-const torsoSvg = (c, d) => `
+// Эмблема лицея SL165 на груди; у правой команды слой отзеркален, поэтому надпись разворачиваем обратно.
+const badgeSvg = (mirror) => `
+  <g transform="translate(-1.5 -27)${mirror ? ' scale(-1 1)' : ''}">
+    <circle r="10" fill="#f2d50f"/><circle r="8.6" fill="#0f6b38"/>
+    <circle r="7.3" fill="none" stroke="#f2d50f" stroke-width=".7" stroke-dasharray="1.2 1"/>
+    <text y="0" text-anchor="middle" font-family="Montserrat,Onest,sans-serif" font-weight="800" font-size="7.4" fill="#f2d50f">SL</text>
+    <text y="5.4" text-anchor="middle" font-family="Montserrat,Onest,sans-serif" font-weight="800" font-size="4.4" fill="#f2d50f">165</text>
+  </g>`;
+// Статичная часть человечка: шапан (в осях торса, бедро в 0,0) с эмблемой лицея и голова с бөріком и үкі.
+const torsoSvg = (c, d, mirror) => `
   <path d="M-12 -47Q0 -51 12 -47L17 13Q0 18 -17 13Z" fill="${c}"/>
   <path d="M-16.4 9.5Q0 14 16.4 9.5" stroke="${GOLD}" stroke-width="3" fill="none"/>
   <path d="M12 -46L16.6 11" stroke="${GOLD}" stroke-width="2.4" fill="none"/>
   <path d="M-14.6 -7H14.6" stroke="${GOLD}" stroke-width="4.5"/>
-  <path d="M-8 -30c0-4 -4-5 -5.5-3.5s0 3.5 1.5 2.5M-8 -30c0-4 4-5 5.5-3.5s0 3.5-1.5 2.5M-8 -30v6" stroke="${GOLD}" stroke-width="1.4" fill="none" stroke-linecap="round" opacity=".9"/>
+  ${badgeSvg(mirror)}
   <path d="M-6 -48L2 -41L9 -48" stroke="${d}" stroke-width="3" fill="none" stroke-linejoin="round"/>`;
 const headSvg = (d) => `
   <circle r="15" fill="#efc39b"/>
@@ -154,7 +162,7 @@ export class Tug {
           torso: gm.appendChild(el('g')), head: gm.appendChild(el('g')),
           armF: limb(gf, c, 10), handF: gf.appendChild(el('circle', { r: 6, fill: '#efc39b' })),
         };
-        fig.torso.innerHTML = torsoSvg(c, d);
+        fig.torso.innerHTML = torsoSvg(c, d, team === 'B');
         fig.head.innerHTML = headSvg(d);
         return fig;
       });

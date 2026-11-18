@@ -1,9 +1,29 @@
 import { h, api, store, go, isTeacher, toastErr, classPicker } from '../core.js';
 import { t } from '../i18n.js';
 import { page } from '../app.js';
+import { checkName, NAME_ERROR } from '../names.js';
+
+/** Проверка настоящего имени у поля ввода: подсказка под полем, «данияр» → «Данияр» при уходе с поля. */
+export function guardName(input) {
+  const err = h('div', { class: 'field-err hidden', role: 'alert' });
+  const clear = () => { err.classList.add('hidden'); input.classList.remove('bad'); };
+  input.addEventListener('input', clear);
+  const check = (focus) => {
+    const c = checkName(input.value);
+    if (c.ok) { input.value = c.name; clear(); return c.name; }
+    err.textContent = t(NAME_ERROR);
+    err.classList.remove('hidden');
+    input.classList.add('bad');
+    if (focus) input.focus();
+    return null;
+  };
+  // Проверяем сразу при уходе с поля — до того, как браузер начнёт ругаться на другие поля формы.
+  input.addEventListener('blur', () => { if (input.value.trim()) check(false); });
+  return { err, check: () => check(true) };
+}
 
 const field = (label, input, hint) => h('label', { class: 'field' }, h('span', null, label), input, hint ? h('div', { class: 'small muted', style: { marginTop: '4px' } }, hint) : null);
-const box = (...content) => page(h('div', { class: 'wrap', style: { maxWidth: '480px', paddingTop: '40px' } }, h('div', { class: 'card pad-lg stack' }, content)));
+const box = (...content) => page(h('div', { class: 'wrap', style: { maxWidth: '480px', paddingTop: '40px' } }, h('div', { class: 'card pad-lg stack kz-top' }, content)));
 
 function afterLogin(user) {
   store.me = user;
@@ -43,8 +63,10 @@ export function register(role = 'student') {
   const pw = h('input', { class: 'input', type: 'password', autocomplete: 'new-password', required: true, minLength: 6 });
   const invite = h('input', { class: 'input', placeholder: 'SL165-0000' });
   const cls = classPicker();
+  const guard = isT ? null : guardName(name);
   const submit = async (e) => {
     e.preventDefault();
+    if (guard && !guard.check()) return;
     try {
       const { user } = await api('/api/register', { method: 'POST', body: {
         role: isT ? 'teacher' : 'student', name: name.value, login: lg.value, password: pw.value, class_name: cls.value, invite: invite.value,
@@ -59,7 +81,8 @@ export function register(role = 'student') {
       h('button', { class: isT ? '' : 'on', onClick: () => go('#/register/student') }, t('Ученик')),
       h('button', { class: isT ? 'on' : '', onClick: () => go('#/register/teacher') }, t('Учитель'))),
     h('form', { class: 'stack', onSubmit: submit },
-      field(isT ? t('Имя и отчество (как обращаются ученики)') : t('Имя и фамилия'), name),
+      field(isT ? t('Имя и отчество (как обращаются ученики)') : t('Имя и фамилия'), name, isT ? null : t('Настоящее имя, можно с фамилией — так тебя увидит учитель')),
+      guard?.err,
       isT ? null : field(t('Класс'), cls),
       field(t('Логин'), lg, t('Латиницей, 3–32 символа')),
       field(t('Пароль'), pw, t('Минимум 6 символов')),

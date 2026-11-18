@@ -13,7 +13,7 @@ function header() {
   return h('header', { class: 'top' }, h('div', { class: 'in' },
     h('a', { class: 'brand', href: '#/' },
       h('img', { src: '/img/icon-192.png', alt: 'SL165' }),
-      h('div', null, h('b', null, 'TugQuiz · SL165'), h('small', null, '№165 мамандандырылған лицей'))),
+      h('div', null, h('b', null, 'TugQuiz', h('span', { class: 'hide-xs' }, ' · SL165')), h('small', null, '№165 мамандандырылған лицей'))),
     h('div', { class: 'grow' }),
     langSw,
     me
@@ -53,8 +53,8 @@ export function teacherPage(active, ...content) {
       h('div', { class: 'main' }, content)),
     h('nav', { class: 'mnav' },
       navItems().filter(([k]) => mobile.includes(k)).map(([key, ico, label]) =>
-        h('a', { href: `#/t${key ? `/${key}` : ''}`, class: active === key ? 'on' : '' }, h('span', { html: icon(ico), style: { display: 'contents' } }), t(label))),
-      h('a', { href: '#', onClick: (e) => { e.preventDefault(); moreMenu(); } }, h('span', { html: icon('grid'), style: { display: 'contents' } }), t('Ещё'))),
+        h('a', { href: `#/t${key ? `/${key}` : ''}`, class: active === key ? 'on' : '' }, h('span', { html: icon(ico), style: { display: 'contents' } }), h('span', { class: 'lbl' }, t(label)))),
+      h('a', { href: '#', onClick: (e) => { e.preventDefault(); moreMenu(); } }, h('span', { html: icon('grid'), style: { display: 'contents' } }), h('span', { class: 'lbl' }, t('Ещё')))),
     footer());
 }
 

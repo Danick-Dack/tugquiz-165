@@ -4,6 +4,7 @@
 import { WebSocketServer } from 'ws';
 import { randomInt, randomBytes } from 'node:crypto';
 import * as db from './db.js';
+import { checkName } from '../web/js/names.js';
 import { gradeAnswer, normText, points, pull, ropeStep } from './quizlib.js';
 
 const LEAD_IN = 3000; // «Приготовьтесь» перед открытием ответов, мс
@@ -94,6 +95,7 @@ export class Game {
     if (!p) {
       name = String(user?.name || name || '').replace(/\s+/g, ' ').trim().slice(0, 24);
       if (name.length < 2) return send(ws, { t: 'error', code: 'name' });
+      if (!user) { const c = checkName(name); if (!c.ok) return send(ws, { t: 'error', code: 'badname' }); name = c.name; }
       if (this.players.size >= 300) return send(ws, { t: 'error', code: 'full' });
       const taken = new Set(this.list().map((x) => x.name.toLowerCase()));
       let unique = name;

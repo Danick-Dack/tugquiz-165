@@ -13,6 +13,7 @@ import { normalizeQuiz } from './quizlib.js';
 import { buildPrompt, buildPackPrompt, parseAiText, callAi } from './ai.js';
 import { hashPassword, checkPassword, newSession, dropSession, userByToken, publicUser, sessionCookie, readCookie } from './auth.js';
 import { createGame, attachSockets, byId } from './game.js';
+import { checkName, NAME_ERROR } from '../web/js/names.js';
 
 const PORT = Number(process.env.PORT) || 8080;
 const WEB = path.join(db.ROOT, 'web');
@@ -140,7 +141,8 @@ on('POST', '/api/register', async ({ body, req, res }) => {
   const first = !db.one('SELECT 1 FROM users');
   const role = first ? 'admin' : body.role === 'teacher' ? 'teacher' : 'student';
   const login = str(body.login, 32);
-  const name = str(body.name, 60).replace(/\s+/g, ' ');
+  let name = str(body.name, 60).replace(/\s+/g, ' ');
+  if (role === 'student') { const c = checkName(name); c.ok || fail(400, NAME_ERROR); name = c.name; }
   const password = String(body.password || '');
   if (!/^[a-zA-Z0-9_.-]{3,32}$/.test(login)) fail(400, 'Логин: 3–32 латинских буквы, цифры, точка, _ или -');
   if (name.length < 2) fail(400, 'Введите имя');
@@ -175,8 +177,9 @@ on('POST', '/api/logout', ({ req, res }) => {
 on('PATCH', '/api/me', async ({ user, body }) => {
   user || fail(401, 'Войдите в аккаунт');
   if (body.name !== undefined) {
-    const name = str(body.name, 60);
+    let name = str(body.name, 60);
     if (name.length < 2) fail(400, 'Введите имя');
+    if (user.role === 'student') { const c = checkName(name); c.ok || fail(400, NAME_ERROR); name = c.name; }
     db.run('UPDATE users SET name=? WHERE id=?', name, user.id);
   }
   if (body.class_name !== undefined && user.role === 'student') {

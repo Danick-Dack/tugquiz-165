@@ -49,7 +49,7 @@ export async function boardSetup() {
     h('div', { class: 'page-head' }, h('div', null, h('h1', null, t('Канат на доске')),
       h('p', { class: 'muted', style: { margin: '6px 0 0' } }, t('Арқан тартыс без телефонов: два ученика у интерактивной доски, у каждого свои примеры. Верный ответ — рывок каната на свою сторону.'))),
       h('button', { class: 'btn primary big', onClick: start }, ic('play'), t('Начать'))),
-    h('div', { class: 'editor', style: { gridTemplateColumns: 'minmax(0,1fr) minmax(0,1fr)' } },
+    h('div', { class: 'editor ai-grid' },
       h('div', { class: 'card stack' }, h('h3', null, t('Вопросы')), srcSeg, srcBox),
       h('div', { class: 'card stack' }, h('h3', null, t('Команды и правила')),
         h('div', { class: 'row' }, [0, 1].map((i) => h('label', { class: 'field grow' }, h('span', { style: { color: i ? 'var(--blue)' : 'var(--red)' } }, i ? t('Справа') : t('Слева')),
