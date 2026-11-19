@@ -1,4 +1,4 @@
-import { h, api, store, go, isTeacher, toastErr, classPicker } from '../core.js';
+import { h, api, store, go, isTeacher, toast, toastErr, classPicker } from '../core.js';
 import { t } from '../i18n.js';
 import { page } from '../app.js';
 import { checkName, NAME_ERROR } from '../names.js';
@@ -46,9 +46,11 @@ export function login() {
   };
   return box(
     h('h1', { style: { fontSize: '1.7rem' } }, t('Вход')),
+    store.kicked ? h('div', { class: 'note-box' }, t('В этот аккаунт вошли на другом устройстве, поэтому здесь вход завершён. Один аккаунт работает только на одном устройстве.')) : null,
     h('form', { class: 'stack', onSubmit: submit },
       field(t('Логин'), lg), field(t('Пароль'), pw),
-      h('button', { class: 'btn primary big', style: { width: '100%' } }, t('Войти'))),
+      h('button', { class: 'btn primary big', style: { width: '100%' } }, t('Войти')),
+      h('a', { class: 'small', href: '#/forgot', style: { alignSelf: 'center' } }, t('Забыли пароль?'))),
     h('div', { class: 'small muted center stack' },
       h('div', null, t('Нет аккаунта?'), ' ', h('a', { href: '#/register/student' }, t('Регистрация ученика')), ' · ', h('a', { href: '#/register/teacher' }, t('Регистрация учителя'))),
       h('div', null, t('Играть можно и без аккаунта:'), ' ', h('a', { href: '#/join' }, t('ввести PIN')))));
@@ -62,6 +64,7 @@ export function register(role = 'student') {
   const lg = h('input', { class: 'input', autocomplete: 'username', required: true, pattern: '[A-Za-z0-9_.\\-]{3,32}', placeholder: 'aigul.s' });
   const pw = h('input', { class: 'input', type: 'password', autocomplete: 'new-password', required: true, minLength: 8, maxLength: 128 });
   const invite = h('input', { class: 'input', placeholder: 'SL165-0000' });
+  const email = h('input', { class: 'input', type: 'email', autocomplete: 'email', maxLength: 120, placeholder: 'name@gmail.com' });
   const cls = classPicker();
   const guard = isT ? null : guardName(name);
   const submit = async (e) => {
@@ -69,7 +72,7 @@ export function register(role = 'student') {
     if (guard && !guard.check()) return;
     try {
       const { user } = await api('/api/register', { method: 'POST', body: {
-        role: isT ? 'teacher' : 'student', name: name.value, login: lg.value, password: pw.value, class_name: cls.value, invite: invite.value,
+        role: isT ? 'teacher' : 'student', name: name.value, login: lg.value, password: pw.value, class_name: cls.value, invite: invite.value, email: email.value,
       } });
       afterLogin(user);
     } catch (err) { toastErr(err); }
@@ -86,7 +89,73 @@ export function register(role = 'student') {
       isT ? null : field(t('Класс'), cls),
       field(t('Логин'), lg, t('Латиницей, 3–32 символа')),
       field(t('Пароль'), pw, t('Минимум 8 символов, не только цифры')),
+      field([t('Почта'), ' ', h('span', { class: 'opt-tag' }, t('необязательно'))], email, t('Желательно: если забудешь пароль, пришлём ссылку для нового')),
       isT && !setup ? field(t('Код учителя'), invite, t('Код выдаёт администратор сайта')) : null,
       h('button', { class: 'btn primary big', style: { width: '100%' } }, t('Создать аккаунт'))),
     h('div', { class: 'small muted center' }, t('Уже есть аккаунт?'), ' ', h('a', { href: '#/login' }, t('Войти'))));
+}
+
+// ---------- забыли пароль ----------
+export function forgot() {
+  if (store.me) return already();
+  const who = h('input', { class: 'input', autocomplete: 'username', required: true, maxLength: 120 });
+  const out = h('div');
+  const send = h('button', { class: 'btn primary big', style: { width: '100%' } }, t('Прислать ссылку'));
+  const submit = async (e) => {
+    e.preventDefault();
+    send.disabled = true;
+    try {
+      await api('/api/forgot', { method: 'POST', body: { login: who.value } });
+      out.replaceChildren(h('div', { class: 'note-box ok' }, t('Если у аккаунта указана почта, письмо со ссылкой уже в пути. Проверьте «Входящие» и «Спам». Ссылка действует 30 минут.')));
+    } catch (err) { toastErr(err); } finally { send.disabled = false; }
+  };
+  return box(
+    h('h1', { style: { fontSize: '1.7rem' } }, t('Забыли пароль?')),
+    h('p', { class: 'muted', style: { margin: 0 } }, t('Введите логин или почту из профиля. Пришлём ссылку, по которой можно задать новый пароль.')),
+    store.mail === false ? h('div', { class: 'note-box' }, t('Восстановление по почте пока не настроено. Попросите администратора или учителя сбросить пароль.')) : null,
+    h('form', { class: 'stack', onSubmit: submit }, field(t('Логин или почта'), who), send),
+    out,
+    h('div', { class: 'small muted center' }, t('Нет почты в профиле? Новый пароль выдаст администратор сайта.'), ' ', h('a', { href: '#/login' }, t('Вернуться ко входу'))));
+}
+
+export function reset(token) {
+  const pw = h('input', { class: 'input', type: 'password', autocomplete: 'new-password', required: true, minLength: 8, maxLength: 128 });
+  const pw2 = h('input', { class: 'input', type: 'password', autocomplete: 'new-password', required: true, minLength: 8, maxLength: 128 });
+  const submit = async (e) => {
+    e.preventDefault();
+    if (pw.value !== pw2.value) { toastErr(new Error(t('Пароли не совпадают'))); return; }
+    try {
+      const { user } = await api('/api/reset', { method: 'POST', body: { token, password: pw.value } });
+      toast(t('Пароль изменён'));
+      store.kicked = false;
+      afterLogin(user);
+    } catch (err) { toastErr(err); }
+  };
+  return box(
+    h('h1', { style: { fontSize: '1.7rem' } }, t('Новый пароль')),
+    h('form', { class: 'stack', onSubmit: submit },
+      field(t('Новый пароль'), pw, t('Минимум 8 символов, не только цифры')), field(t('Повторите пароль'), pw2),
+      h('button', { class: 'btn primary big', style: { width: '100%' } }, t('Сохранить и войти'))),
+    h('div', { class: 'small muted center' }, h('a', { href: '#/forgot' }, t('Ссылка не работает? Запросить новую'))));
+}
+
+/** Карточка «почта для восстановления» для кабинета ученика и настроек учителя. */
+export function emailCard(dark = false) {
+  const me = store.me;
+  const email = h('input', { class: 'input', type: 'email', autocomplete: 'email', maxLength: 120, value: me.email || '', placeholder: 'name@gmail.com' });
+  const pw = h('input', { class: 'input', type: 'password', autocomplete: 'current-password', placeholder: t('Текущий пароль') });
+  const pwBox = h('div', { class: 'hidden' }, pw);
+  email.addEventListener('input', () => pwBox.classList.toggle('hidden', !me.email || email.value.trim().toLowerCase() === me.email));
+  const save = async () => {
+    try {
+      store.me = (await api('/api/me', { method: 'PATCH', body: { email: email.value, oldPassword: pw.value } })).user;
+      toast(t('Сохранено'));
+      pw.value = '';
+      pwBox.classList.add('hidden');
+    } catch (e) { toastErr(e); }
+  };
+  return h('div', { class: `card stack${dark ? ' dark' : ''}` },
+    h('h3', { style: { margin: 0 } }, t('Почта для восстановления')),
+    h('p', { class: 'small muted', style: { margin: 0 } }, me.email ? t('Если забудешь пароль, ссылка для нового придёт сюда.') : t('Необязательно, но желательно: без почты забытый пароль восстановит только администратор.')),
+    email, pwBox, h('button', { class: 'btn', onClick: save }, t('Сохранить почту')));
 }

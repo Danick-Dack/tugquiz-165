@@ -2,6 +2,7 @@ import { h, go, store, isTeacher, icon } from '../core.js';
 import { t } from '../i18n.js';
 import { page } from '../app.js';
 import { Tug } from '../rope.js';
+import { modeArt } from '../mode-art.js';
 
 export function pinForm(big = false) {
   const input = h('input', {
@@ -22,8 +23,8 @@ export function home() {
   }, 1500);
 
   const me = store.me;
-  const mode = (ico, title, text) => h('div', { class: 'mode-card' }, h('h3', null, h('span', { html: icon(ico), style: { display: 'contents' } }), t(title)), h('p', null, t(text)));
-  const role = (title, items, btn) => h('div', { class: 'card pad-lg role' }, h('h2', null, t(title)), h('ul', null, items.map((i) => h('li', null, t(i)))), btn);
+  const mode = (art, ico, title, text) => h('div', { class: 'mode-card' }, h('div', { html: modeArt(art), style: { display: 'contents' } }), h('h3', null, h('span', { html: icon(ico), style: { display: 'contents' } }), t(title)), h('p', null, t(text)));
+  const role = (title, items, btn, cls = '') => h('div', { class: `card pad-lg role ${cls}` }, h('h2', null, t(title)), h('ul', null, items.map((i) => h('li', null, t(i)))), btn);
 
   const node = page(
     store.needsSetup ? h('div', { class: 'section', style: { paddingTop: '24px' } }, h('div', { class: 'card row between' },
@@ -43,14 +44,14 @@ export function home() {
         role('Для учителей', ['Квизы по всем предметам лицея', 'Формулы, картинки, видео и ссылки', 'ИИ составит вопросы по теме за минуту', 'Отчёты с графиками и PDF'],
           h('a', { class: 'btn', href: me ? '#/t' : '#/login' }, t('Войти как учитель'))),
         role('Для учеников', ['Вход по PIN без установки приложений', 'Команды или каждый сам за себя', 'Очки за правильность и скорость', 'Личный рейтинг, уровни и награды'],
-          h('a', { class: 'btn', href: '#/register/student' }, t('Создать аккаунт'))))),
+          h('a', { class: 'btn', href: '#/register/student' }, t('Создать аккаунт')), 'kid'))),
     h('div', { class: 'section' },
       h('h2', null, t('Четыре режима игры')),
       h('div', { class: 'modes' },
-        mode('rope', 'Арқан тартыс', 'Две команды отвечают с телефонов, каждый верный и быстрый ответ тянет канат'),
-        mode('swap', 'Команды по очереди', 'Вопрос первой команде, затем второй, очки за правильность и скорость'),
-        mode('trophy', 'Каждый сам за себя', 'Весь класс отвечает на вопрос, открытые ответы учитель может оценить сам'),
-        mode('monitor', 'Канат на доске', 'Без телефонов: две половины интерактивной доски, у каждой команды свои примеры'))));
+        mode('tug', 'rope', 'Арқан тартыс', 'Две команды отвечают с телефонов, каждый верный и быстрый ответ тянет канат'),
+        mode('duel', 'swap', 'Команды по очереди', 'Вопрос первой команде, затем второй, очки за правильность и скорость'),
+        mode('solo', 'trophy', 'Каждый сам за себя', 'Весь класс отвечает на вопрос, открытые ответы учитель может оценить сам'),
+        mode('board', 'monitor', 'Канат на доске', 'Без телефонов: две половины интерактивной доски, у каждой команды свои примеры'))));
   node.cleanup = () => clearInterval(timer);
   return node;
 }

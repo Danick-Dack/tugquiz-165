@@ -10,6 +10,10 @@ import { guardName } from './auth.js';
 import { NAME_ERROR } from '../names.js';
 
 const L = 'ABCDEF';
+// Короткие реплики после ответа: каждый раз новая, чтобы не приедалось.
+const CHEER = ['Точно в цель', 'Так держать', 'Керемет', 'Голова варит', 'Вот это скорость'];
+const COMFORT = ['Мимо — следующий будет твоим', 'Не беда, играем дальше', 'Почти. Соберись'];
+const pickOne = (list) => list[Math.floor(Math.random() * list.length)];
 const ls = {
   get: (k) => { try { return localStorage.getItem(k); } catch { return null; } },
   set: (k, v) => { try { localStorage.setItem(k, v); } catch { /* приватный режим */ } },
@@ -24,7 +28,8 @@ function joinForm(pin, error) {
   const name = h('input', { class: 'input', value: ls.get('tq_name') || '', maxLength: 24, autocomplete: 'name', placeholder: t('Имя и фамилия'), required: true, style: { fontSize: '17px' } });
   const guard = guardName(name);
   return page(h('div', { class: 'wrap', style: { maxWidth: '440px', paddingTop: '40px' } }, h('div', { class: 'card pad-lg stack' },
-    h('h1', null, `${t('Игра')} ${pin}`),
+    h('div', { class: 'join-pin' }, h('small', null, t('Игра')), h('b', null, pin)),
+    h('div', { class: 'vs-strip', 'aria-hidden': 'true' }, h('i', { class: 'a' }), h('span', { class: 'muted' }, 'vs'), h('i', { class: 'b' })),
     error ? h('p', { style: { color: 'var(--bad)' } }, error) : null,
     h('form', { class: 'stack', onSubmit: (e) => {
       e.preventDefault();
@@ -165,12 +170,23 @@ export function play(pin) {
         const mine = st.mine;
         const g = mine?.grade ?? 0;
         const mark = !mine ? '—' : g === 1 ? '✓' : g > 0 ? '½' : '✗';
-        if (lastReveal !== key) { lastReveal = key; if (mine) (g ? sound.good() : sound.bad()); if (g) navigator.vibrate?.([30, 40, 30]); }
+        const kind = !mine ? 'none' : g === 1 ? 'good' : g > 0 ? 'part' : 'bad';
+        const fresh = lastReveal !== key;
+        if (fresh) {
+          lastReveal = key;
+          if (mine) (g ? sound.good() : sound.bad());
+          if (g) navigator.vibrate?.([30, 40, 30]); else if (mine) navigator.vibrate?.(120);
+          if (g === 1 && st.me.streak >= 3) confetti(undefined, 50);
+        }
+        const pts = mine?.points ? h('div', { class: 'pts' }, `+${mine.points}`) : null;
+        if (pts && fresh) countUp(pts, mine.points);
         return { el: h('div', { class: 'stack center' },
-          h('div', { class: 'big-mark text', style: { color: !mine ? 'var(--d-muted)' : g === 1 ? '#5fd38d' : g > 0 ? 'var(--ribbon)' : '#ff8a8a' } }, mark),
-          h('h2', null, !mine ? (st.canAnswer ? t('Время вышло') : t('Отвечала другая команда')) : g === 1 ? t('Верно') : g > 0 ? t('Частично верно') : t('Неверно')),
-          mine?.points ? h('div', { style: { fontFamily: 'var(--display)', fontSize: '32px', color: 'var(--ribbon)' } }, `+${mine.points}`) : null,
-          st.me.streak >= 2 ? h('div', { class: 'streak', style: { justifyContent: 'center', fontSize: '15px' } }, ic('flame'), `${t('Серия')}: ${st.me.streak}`) : null,
+          h('div', { class: `react ${kind}` },
+            h('div', { class: 'big-mark text' }, mark),
+            h('h2', null, !mine ? (st.canAnswer ? t('Время вышло') : t('Отвечала другая команда')) : g === 1 ? t('Верно') : g > 0 ? t('Частично верно') : t('Неверно')),
+            mine ? h('div', { class: 'cheer' }, t(pickOne(g ? CHEER : COMFORT))) : null,
+            pts),
+          st.me.streak >= 2 ? h('div', null, h('span', { class: 'streak-big' }, ic('flame'), `${t('Серия')} ×${st.me.streak}`)) : null,
           h('div', { class: 'card' }, h('div', { class: 'small muted' }, t('Правильный ответ')), h('div', { class: 'rich', style: { fontWeight: 600, fontSize: '20px' }, html: rich(st.reveal.correctText === 'true' ? t('Верно') : st.reveal.correctText === 'false' ? t('Неверно') : st.reveal.correctText) })),
           h('div', null, `${t('Место')}: #${st.me.rank} ${t('из')} ${st.me.of}`), tugBox()) };
       }
@@ -196,6 +212,17 @@ export function play(pin) {
     }
   }
 
+  // Очки за ответ набегают от нуля — так заметнее, сколько принёс ответ.
+  function countUp(el, to) {
+    const t0 = performance.now();
+    const step = (now) => {
+      const k = Math.min(1, (now - t0) / 700);
+      el.textContent = `+${Math.round(to * (1 - (1 - k) ** 3))}`;
+      if (k < 1) requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+  }
+
   let raf = 0;
   const loop = () => {
     raf = requestAnimationFrame(loop);
@@ -210,7 +237,9 @@ export function play(pin) {
       return;
     }
     if (view.area.classList.contains('hidden')) { fill(view.lead); view.area.classList.remove('hidden'); }
-    view.bar.style.transform = `scaleX(${Math.min(1, Math.max(0, (s.deadline - now) / (s.deadline - s.opensAt)))})`;
+    const left = Math.min(1, Math.max(0, (s.deadline - now) / (s.deadline - s.opensAt)));
+    view.bar.style.transform = `scaleX(${left})`;
+    view.bar.parentNode.classList.toggle('low', left < 0.25);
   };
   loop();
 

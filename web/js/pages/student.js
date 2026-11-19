@@ -3,8 +3,11 @@ import { h, fill, api, store, subjChip, fmtDate, pct, toast, toastErr, icon, cla
 import { t } from '../i18n.js';
 import { page } from '../app.js';
 import { pinForm } from './home.js';
+import { emailCard } from './auth.js';
 import { MODE_NAMES } from './teacher.js';
 
+// Каждая награда своего цвета: серые, пока не получены.
+const BADGE_COLORS = ['#138a49', '#c98a00', '#0a7f99', '#d83c41', '#e2620f', '#7d4bb7', '#3657c9', '#946b10'];
 const level = (xp) => Math.floor(Math.sqrt(xp / 50)) + 1;
 const levelXp = (lvl) => 50 * (lvl - 1) ** 2;
 
@@ -37,14 +40,14 @@ export async function cabinet() {
     h('div', { class: 'grid', style: { gridTemplateColumns: 'minmax(0, 2fr) minmax(280px, 1fr)' } },
       h('div', { class: 'card dark pad-lg stack' },
         h('div', { class: 'row between' }, h('div', null, h('h1', { style: { margin: 0 } }, store.me.name), h('div', { style: { color: 'var(--d-sub)' } }, `${t('Класс')}: `, cls)),
-          h('div', { style: { textAlign: 'center' } }, h('div', { style: { fontFamily: 'var(--display)', fontSize: '40px', color: 'var(--ribbon)' } }, lvl), h('div', { class: 'small' }, t('уровень')))),
+          h('div', { class: 'lvl-medal' }, h('div', null, h('b', null, lvl), h('span', null, t('уровень'))))),
         h('div', null, h('div', { class: 'lvl' }, h('i', { style: { width: `${progress}%` } })), h('div', { class: 'small', style: { marginTop: '8px', color: 'var(--d-sub)' } },
           `${stats.xp} XP · ${t('до уровня')} ${lvl + 1}: ${levelXp(lvl + 1) - stats.xp} XP`)),
         h('div', { class: 'row', style: { gap: '30px' } }, [[`#${stats.rank}`, 'в лицее'], [g.length, 'игр'], [wins, 'побед'], [`${accuracy}%`, 'точность']].map(([v, l]) =>
           h('div', { class: 'stat' }, h('b', null, v), h('span', null, t(l)))))),
-      h('div', { class: 'card stack' }, h('h3', null, t('Войти в игру')), pinForm(true))),
-    h('div', { class: 'card' }, h('h3', null, t('Награды')), h('div', { class: 'row', style: { gap: '8px' } },
-      badges.map(([ico, label, on]) => h('div', { class: `badge-big ${on ? '' : 'off'}` }, h('i', { html: icon(ico) }), t(label))))),
+      h('div', { class: 'stack', style: { marginTop: 0 } }, h('div', { class: 'card stack' }, h('h3', null, t('Войти в игру')), pinForm(true)), store.me.email ? null : emailCard())),
+    h('div', { class: 'card stack' }, h('div', { class: 'row between' }, h('h3', { style: { margin: 0 } }, t('Награды')), h('span', { class: 'small muted' }, `${badges.filter((b) => b[2]).length} / ${badges.length}`)),
+      h('div', { class: 'badges' }, badges.map(([ico, label, on], i) => h('div', { class: `badge-big ${on ? '' : 'off'}`, style: `--bc: ${BADGE_COLORS[i]}` }, h('i', { html: icon(ico) }), t(label))))),
     h('div', { class: 'grid', style: { gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))' } },
       h('div', { class: 'card stack' }, h('div', { class: 'row between' }, h('h3', { style: { margin: 0 } }, t('Рейтинг')), lbTabs), lb),
       h('div', { class: 'card' }, h('h3', null, t('Мои игры')), g.length ? g.slice(0, 30).map((x) => h('div', { class: 'list-row' },

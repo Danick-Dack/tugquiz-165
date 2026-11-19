@@ -297,9 +297,9 @@ export const sound = {
   win() { this.play('win'); }, lose() { this.play('lose'); }, draw() { this.play('draw'); }, finish() { this.play('finish'); },
 };
 
-export function confetti(colors = ['#f6e21a', '#12773f', '#e5484d', '#3d63dd', '#fff']) {
+export function confetti(colors = ['#f6e21a', '#12773f', '#e5484d', '#3d63dd', '#fff'], count = 140) {
   const box = h('div', { class: 'confetti' });
-  for (let i = 0; i < 140; i++) {
+  for (let i = 0; i < count; i++) {
     box.append(h('i', { style: {
       left: `${Math.random() * 100}%`, background: colors[i % colors.length], animationDuration: `${2 + Math.random() * 2.5}s`,
       animationDelay: `${Math.random() * 0.8}s`, transform: `rotate(${Math.random() * 360}deg)`,

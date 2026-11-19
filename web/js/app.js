@@ -1,5 +1,5 @@
 // Точка входа: загрузка профиля, маршруты (#/...), общие шапка/подвал и меню учителя.
-import { h, fill, api, store, go, isTeacher, icon, ic, modal, toastErr, DEV } from './core.js';
+import { h, fill, api, store, go, isTeacher, icon, ic, modal, toast, toastErr, DEV } from './core.js';
 import { t, lang, setLang } from './i18n.js';
 
 const app = document.getElementById('app');
@@ -71,6 +71,8 @@ const ROUTES = [
   [/^$/, () => import('./pages/home.js').then((m) => m.home())],
   [/^login$/, () => import('./pages/auth.js').then((m) => m.login())],
   [/^register(?:\/(teacher|student))?$/, (r) => import('./pages/auth.js').then((m) => m.register(r))],
+  [/^forgot$/, () => import('./pages/auth.js').then((m) => m.forgot())],
+  [/^reset\/([\w-]{20,100})$/, (tok) => import('./pages/auth.js').then((m) => m.reset(tok))],
   [/^join(?:\/(\d{6}))?$/, (pin) => import('./pages/play.js').then((m) => m.play(pin))],
   [/^s$/, () => import('./pages/student.js').then((m) => m.cabinet()), 'login'],
   [/^t$/, () => import('./pages/teacher.js').then((m) => m.dashboard()), 'teacher'],
@@ -110,7 +112,8 @@ export async function render() {
 async function boot() {
   try {
     const r = await api('/api/me');
-    Object.assign(store, { me: r.user, meta: r.meta, needsSetup: r.needsSetup });
+    Object.assign(store, { me: r.user, meta: r.meta, needsSetup: r.needsSetup, mail: r.mail, kicked: r.kicked });
+    if (r.kicked) setTimeout(() => toast(t('В аккаунт вошли на другом устройстве'), 'err'), 300);
   } catch (e) {
     fill(app, h('div', { class: 'wrap empty' }, h('h2', null, t('Сервер недоступен')), h('p', null, e.message)));
     return;

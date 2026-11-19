@@ -3,6 +3,7 @@ import { h, fill, api, store, go, icon, ic, subj, subjChip, fmtDate, toast, toas
 import { t, lang, setLang } from '../i18n.js';
 import { teacherPage, render } from '../app.js';
 import { launchDialog, launchById } from './launch.js';
+import { emailCard } from './auth.js';
 
 export const MODE_NAMES = { tug: 'Арқан тартыс', duel: 'Команды по очереди', solo: 'Каждый сам за себя', board: 'Канат на доске' };
 export const AI_PRESETS = {
@@ -174,6 +175,7 @@ export function settings() {
         field('Имя', name), h('button', { class: 'btn primary', onClick: saveName }, t('Сохранить'))),
       h('div', { class: 'card stack' }, h('h3', null, t('Смена пароля')), field('Старый пароль', oldPw), field('Новый пароль', newPw),
         h('button', { class: 'btn', onClick: savePw }, t('Изменить пароль'))),
+      emailCard(),
       h('div', { class: 'card stack' }, h('h3', null, t('Интерфейс')),
         h('div', { class: 'row between' }, h('b', null, t('Язык')), h('div', { class: 'seg' },
           ['ru', 'kk'].map((l) => h('button', { class: lang() === l ? 'on' : '', onClick: () => { setLang(l); render(); } }, l === 'ru' ? 'Русский' : 'Қазақша')))),
@@ -212,7 +214,7 @@ export async function admin() {
   const field = (label, input, extra) => h('label', { class: 'field' }, h('span', null, t(label), extra ? [' ', extra] : null), input);
 
   const userRow = (u) => h('tr', null,
-    h('td', null, h('b', null, u.name), h('div', { class: 'small muted' }, u.login)),
+    h('td', null, h('b', null, u.name), h('div', { class: 'small muted' }, u.login, u.email ? ` · ${u.email}` : '')),
     h('td', null, h('span', { class: 'chip' }, t({ admin: 'админ', teacher: 'учитель', student: 'ученик' }[u.role])), u.class_name ? ` ${u.class_name}` : ''),
     h('td', { class: 'small' }, u.role === 'student' ? `${u.xp} XP` : `${u.quizzes} ${t('квизов')} · ${u.games} ${t('игр')}`),
     h('td', null, u.active ? '' : h('span', { class: 'chip', style: { background: 'var(--bad-s)', color: 'var(--bad)' } }, t('отключён'))),
@@ -240,11 +242,39 @@ export async function admin() {
         field('Сервис', provider), field('Ключ API', key, keyLink),
         h('details', null, h('summary', { class: 'small muted', style: { cursor: 'pointer' } }, t('Адрес и модель (для опытных)')),
           h('div', { class: 'stack', style: { marginTop: '10px' } }, field('Адрес API', base), field('Модель', model))),
-        h('button', { class: 'btn primary', onClick: saveAi }, t('Сохранить настройки ИИ')))),
+        h('button', { class: 'btn primary', onClick: saveAi }, t('Сохранить настройки ИИ'))),
+      mailSettings(conf.mail)),
     h('h2', { style: { marginTop: '28px' } }, t('Пользователи')),
     ['teachers', 'students'].map((group) => {
       const list = users.filter((u) => (group === 'teachers') === roles.includes(u.role));
       return h('div', { class: 'card', style: { marginBottom: '16px' } }, h('h3', null, `${group === 'teachers' ? t('Учителя') : t('Ученики')} · ${list.length}`),
         list.length ? h('div', { class: 'tbl-wrap' }, h('table', { class: 'tbl' }, h('tbody', null, list.map(userRow)))) : h('p', { class: 'muted' }, t('Пока никого')));
     }));
+}
+
+// Почта, с которой сайт отправляет ссылки для нового пароля. Проще всего — Gmail с паролем приложения.
+function mailSettings(m) {
+  const host = h('input', { class: 'input', value: m.host || 'smtp.gmail.com' });
+  const port = h('input', { class: 'input', inputmode: 'numeric', value: m.port || 465 });
+  const user = h('input', { class: 'input', type: 'email', value: m.user || '', placeholder: 'tugquiz.school@gmail.com' });
+  const pass = h('input', { class: 'input', type: 'password', autocomplete: 'off', placeholder: m.hasPass ? t('сохранён') : 'abcd efgh ijkl mnop' });
+  const field = (label, input) => h('label', { class: 'field' }, h('span', null, t(label)), input);
+  const save = async () => {
+    try {
+      await api('/api/admin/settings', { method: 'PUT', body: { mail: { host: host.value, port: port.value, user: user.value, ...(pass.value ? { pass: pass.value } : {}) } } });
+      toast(t('Сохранено'));
+      render();
+    } catch (e) { toastErr(e); }
+  };
+  const test = async () => {
+    try { const r = await api('/api/admin/mail-test', { method: 'POST' }); toast(`${t('Письмо отправлено')}: ${r.to}`); } catch (e) { toastErr(e); }
+  };
+  return h('div', { class: 'card stack' }, h('h3', null, t('Почта для восстановления паролей')),
+    h('p', { class: 'small muted' }, m.ready ? t('Почта подключена: по кнопке «Забыли пароль?» придёт письмо со ссылкой.')
+      : t('Создайте Gmail для школы, включите двухэтапную проверку и получите «Пароль приложения» (16 букв). Его и адрес вставьте сюда.')),
+    m.ready ? null : h('a', { class: 'small', href: 'https://myaccount.google.com/apppasswords', target: '_blank', rel: 'noopener' }, t('Получить пароль приложения Google →')),
+    field('Адрес почты', user), field('Пароль приложения', pass),
+    h('details', null, h('summary', { class: 'small muted', style: { cursor: 'pointer' } }, t('Сервер и порт (для опытных)')),
+      h('div', { class: 'stack', style: { marginTop: '10px' } }, field('Сервер', host), field('Порт', port))),
+    h('div', { class: 'row' }, h('button', { class: 'btn primary', onClick: save }, t('Сохранить почту')), m.ready ? h('button', { class: 'btn', onClick: test }, t('Отправить проверочное письмо')) : null));
 }

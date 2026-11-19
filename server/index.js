@@ -11,7 +11,8 @@ import * as db from './db.js';
 import { meta, isClass, SUBJECTS, CUSTOM_COLORS } from './constants.js';
 import { normalizeQuiz } from './quizlib.js';
 import { buildPrompt, buildPackPrompt, parseAiText, callAi } from './ai.js';
-import { hashPassword, checkPassword, newSession, dropSession, dropOtherSessions, userByToken, publicUser, sessionCookie, readCookie } from './auth.js';
+import { hashPassword, checkPassword, newSession, dropSession, dropOtherSessions, userByToken, publicUser, sessionCookie, readCookie, touchSession, newReset, peekReset, takeReset, cleanEmail } from './auth.js';
+import { mailConf, mailReady, sendMail, resetLetter } from './mail.js';
 import { createGame, attachSockets, byId } from './game.js';
 import { checkName, NAME_ERROR } from '../web/js/names.js';
 import { clientIp, limiter, safeEqual, weakPassword, sameOrigin, applySecurityHeaders, audit, publicHttpsUrl } from './security.js';
@@ -46,6 +47,9 @@ const inviteIpFails = limiter(8, 3600e3); // неверные коды учит�
 const inviteAllFails = limiter(80, 3600e3); // и вообще по всему сайту
 const uploadLimit = limiter(60, 3600e3); // загрузок файлов от одного учителя
 const aiLimit = limiter(30, 3600e3); // запросов к ИИ от одного учителя
+const forgotIpLimit = limiter(10, 3600e3); // запросов «забыли пароль» с одного IP
+const forgotUserLimit = limiter(3, 3600e3); // писем одному пользователю в час
+const resetFails = limiter(30, 3600e3); // неверных ссылок сброса с одного IP
 const liveLimit = 15; // одновременных игр у одного ведущего
 
 class HttpError extends Error { constructor(status, message) { super(message); this.status = status; } }
@@ -145,7 +149,15 @@ const customSubjects = () => db.getSetting('subjects_custom', []);
 const isSubject = (k) => Boolean(SUBJECTS[k]) || customSubjects().some((s) => s.key === k);
 const siteMeta = () => meta(customSubjects());
 
-on('GET', '/api/me', ({ user }) => ({ user, needsSetup: !db.one('SELECT 1 FROM users'), meta: siteMeta() }));
+on('GET', '/api/me', ({ user, req, res }) => {
+  const token = readCookie(req, 'sid');
+  // Вход живёт бессрочно, пока устройством пользуются: раз в сутки продлеваем cookie.
+  if (user && touchSession(token)) res.setHeader('Set-Cookie', sessionCookie(token, isSecure(req)));
+  // Cookie есть, а сессии нет — в аккаунт вошли на другом устройстве (или сменили пароль).
+  const kicked = !user && Boolean(token);
+  if (kicked) res.setHeader('Set-Cookie', sessionCookie('', isSecure(req)));
+  return { user, kicked, needsSetup: !db.one('SELECT 1 FROM users'), meta: siteMeta(), mail: mailReady() };
+});
 
 on('POST', '/api/subjects', ({ user, body }) => {
   needTeacher(user);
@@ -183,9 +195,11 @@ on('POST', '/api/register', async ({ body, req, res }) => {
   }
   const cls = role === 'student' ? str(body.class_name, 4).toUpperCase() : '';
   if (role === 'student' && !isClass(cls)) fail(400, 'Выберите класс');
+  const email = cleanEmail(body.email);
+  if (email === false) fail(400, 'Почта указана неверно. Проверьте адрес или оставьте поле пустым.');
   if (db.one('SELECT 1 FROM users WHERE login=?', login)) fail(409, 'Такой логин уже занят');
-  const id = Number(db.run('INSERT INTO users(role,login,name,pass,class_name,created) VALUES(?,?,?,?,?,?)',
-    role, login, name, await hashPassword(password), cls, Date.now()).lastInsertRowid);
+  const id = Number(db.run('INSERT INTO users(role,login,name,pass,class_name,email,created) VALUES(?,?,?,?,?,?,?)',
+    role, login, name, await hashPassword(password), cls, email, Date.now()).lastInsertRowid);
   res.setHeader('Set-Cookie', sessionCookie(newSession(id), isSecure(req)));
   return { user: publicUser(db.one('SELECT * FROM users WHERE id=?', id)) };
 });
@@ -197,6 +211,39 @@ on('POST', '/api/login', async ({ body, req, res }) => {
   if (!u.active) fail(403, 'Аккаунт отключён администратором');
   guard.ok();
   res.setHeader('Set-Cookie', sessionCookie(newSession(u.id), isSecure(req)));
+  return { user: publicUser(u) };
+});
+
+// ---------- забыли пароль ----------
+on('POST', '/api/forgot', async ({ body, req }) => {
+  if (!mailReady()) fail(503, 'Восстановление по почте пока не настроено. Попросите администратора или учителя сбросить пароль.');
+  if (!forgotIpLimit.hit(clientIp(req))) fail(429, 'Слишком много запросов. Попробуйте через час.');
+  const who = str(body.login, 120).toLowerCase();
+  if (who.length < 3) fail(400, 'Введите логин или почту');
+  const u = db.one("SELECT * FROM users WHERE active=1 AND email<>'' AND (login=? OR email=?)", who, who);
+  // Ответ одинаковый, есть такой аккаунт или нет: так нельзя узнать чужие логины и адреса.
+  if (u && forgotUserLimit.hit(u.id)) {
+    const letter = resetLetter(u.name, `${mailConf().site}/#/reset/${newReset(u.id)}`);
+    sendMail(u.email, letter.subject, letter.text, letter.html).catch((e) => console.error('mail', e.message));
+    audit('forgot', req, `user=${u.id}`);
+  }
+  return { ok: true };
+});
+
+on('POST', '/api/reset', async ({ body, req, res }) => {
+  const ip = clientIp(req);
+  if (resetFails.blocked(ip)) fail(429, 'Слишком много попыток. Попробуйте через час.');
+  const token = str(body.token, 100);
+  const password = String(body.password || '');
+  const id = peekReset(token);
+  if (!id) { resetFails.add(ip); fail(400, 'Ссылка устарела или уже использована. Запросите новое письмо.'); }
+  const u = db.one('SELECT * FROM users WHERE id=? AND active=1', id) || fail(400, 'Аккаунт отключён');
+  const weak = weakPassword(password, u.login);
+  if (weak) fail(400, weak);
+  if (takeReset(token) !== id) fail(400, 'Ссылка уже использована');
+  db.run('UPDATE users SET pass=? WHERE id=?', await hashPassword(password), id);
+  res.setHeader('Set-Cookie', sessionCookie(newSession(id), isSecure(req))); // заодно выходим со всех других устройств
+  audit('reset', req, `user=${id}`);
   return { user: publicUser(u) };
 });
 
@@ -220,6 +267,17 @@ on('PATCH', '/api/me', async ({ user, body, req }) => {
     db.run('UPDATE users SET class_name=? WHERE id=?', cls, user.id);
   }
   if (body.tour_done !== undefined) db.run('UPDATE users SET tour_done=? WHERE id=?', body.tour_done ? 1 : 0, user.id);
+  if (body.email !== undefined) {
+    const email = cleanEmail(body.email);
+    if (email === false) fail(400, 'Почта указана неверно');
+    // Сменить уже указанную почту можно только с паролем: иначе чужой человек на устройстве увёл бы аккаунт.
+    const row = db.one('SELECT pass, email FROM users WHERE id=?', user.id);
+    if (row.email && email !== row.email) {
+      if (!loginUserFails.hit(`pw:${user.id}`)) fail(429, 'Слишком много попыток. Подождите 15 минут.');
+      if (!(await checkPassword(String(body.oldPassword || ''), row.pass))) fail(403, 'Чтобы сменить почту, введите текущий пароль');
+    }
+    db.run('UPDATE users SET email=? WHERE id=?', email, user.id);
+  }
   if (body.password) {
     if (!loginUserFails.hit(`pw:${user.id}`)) fail(429, 'Слишком много попыток. Подождите 15 минут.');
     const row = db.one('SELECT pass FROM users WHERE id=?', user.id);
@@ -383,11 +441,28 @@ const maskKey = (k) => (k ? `${k.slice(0, 4)}…${k.slice(-4)}` : '');
 on('GET', '/api/admin/settings', ({ user }) => {
   needAdmin(user);
   const ai = aiConf();
-  return { invite_code: db.getSetting('invite_code'), ai: { ...ai, key: maskKey(ai.key), hasKey: Boolean(ai.key) } };
+  const m = mailConf();
+  return { invite_code: db.getSetting('invite_code'), ai: { ...ai, key: maskKey(ai.key), hasKey: Boolean(ai.key) },
+    mail: { host: m.host || '', port: m.port || 465, user: m.user || '', hasPass: Boolean(m.pass), ready: mailReady() } };
 });
 
-on('PUT', '/api/admin/settings', ({ user, body }) => {
+on('PUT', '/api/admin/settings', ({ user, body, req }) => {
   needAdmin(user);
+  if (body.mail) {
+    const old = mailConf();
+    const host = str(body.mail.host, 120).toLowerCase();
+    const port = Number(body.mail.port) || 465;
+    const mailUser = cleanEmail(body.mail.user);
+    if (!/^[a-z0-9.-]+\.[a-z]{2,}$/.test(host)) fail(400, 'Укажите почтовый сервер, например smtp.gmail.com');
+    if (![465, 587].includes(port)) fail(400, 'Порт — 465 или 587');
+    if (!mailUser) fail(400, 'Укажите адрес почтового ящика');
+    // Адрес сайта для ссылок в письмах берём из браузера администратора, а не из заголовка Host (его можно подделать).
+    let site = old.site || '';
+    try { const o = new URL(req.headers.origin); if (o.protocol === 'https:' || o.hostname === 'localhost') site = o.origin; } catch { /* оставляем прежний */ }
+    if (!site) fail(400, 'Откройте настройки с адреса сайта по https');
+    const pass = body.mail.pass ? str(body.mail.pass, 200).replace(/\s+/g, '') : old.pass;
+    db.setSetting('mail', { host, port, user: mailUser, pass, site });
+  }
   if (body.invite_code !== undefined) {
     const code = str(body.invite_code, 32);
     if (code.length < 4) fail(400, 'Код учителя — минимум 4 символа');
@@ -405,9 +480,19 @@ on('PUT', '/api/admin/settings', ({ user, body }) => {
   return { ok: true };
 });
 
+on('POST', '/api/admin/mail-test', async ({ user }) => {
+  needAdmin(user);
+  if (!mailReady()) fail(400, 'Сначала сохраните настройки почты');
+  const to = db.one('SELECT email FROM users WHERE id=?', user.id).email || mailConf().user;
+  try {
+    await sendMail(to, 'TugQuiz: проверка почты', 'Почта настроена: ученики и учителя смогут восстанавливать пароль.', '<p>Почта настроена: ученики и учителя смогут восстанавливать пароль.</p>');
+  } catch (e) { fail(502, `Письмо не ушло: ${String(e.message).slice(0, 160)}`); }
+  return { to };
+});
+
 on('GET', '/api/admin/users', ({ user }) => {
   needAdmin(user);
-  return db.all(`SELECT id, role, login, name, class_name, xp, active, created,
+  return db.all(`SELECT id, role, login, name, class_name, xp, active, created, email,
                  (SELECT COUNT(*) FROM quizzes WHERE owner_id=users.id) AS quizzes,
                  (SELECT COUNT(*) FROM games WHERE host_id=users.id AND status='done') AS games
                  FROM users ORDER BY role, name`);

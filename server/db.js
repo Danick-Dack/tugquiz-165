@@ -68,7 +68,19 @@ CREATE TABLE IF NOT EXISTS game_players(
 );
 CREATE INDEX IF NOT EXISTS gp_user ON game_players(user_id);
 CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY, value TEXT);
+CREATE TABLE IF NOT EXISTS resets(
+  token TEXT PRIMARY KEY,                   -- SHA-256 одноразового кода из письма
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  created INTEGER
+);
 `);
+// Новые колонки в старых базах: почта для восстановления пароля и время последнего захода сессии.
+const addCol = (table, col, def) => {
+  if (!db.prepare(`PRAGMA table_info(${table})`).all().some((c) => c.name === col)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${col} ${def}`);
+};
+addCol('users', 'email', "TEXT DEFAULT ''");
+addCol('sessions', 'seen', 'INTEGER');
+db.exec('UPDATE sessions SET seen=created WHERE seen IS NULL');
 
 const cache = new Map();
 const stmt = (sql) => cache.get(sql) || cache.set(sql, db.prepare(sql)).get(sql);
