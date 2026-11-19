@@ -11,8 +11,8 @@ import * as db from './db.js';
 import { meta, isClass, SUBJECTS, CUSTOM_COLORS } from './constants.js';
 import { normalizeQuiz } from './quizlib.js';
 import { buildPrompt, buildPackPrompt, parseAiText, callAi } from './ai.js';
-import { hashPassword, checkPassword, newSession, dropSession, dropOtherSessions, userByToken, publicUser, sessionCookie, readCookie, touchSession, newReset, peekReset, takeReset, cleanEmail } from './auth.js';
-import { mailConf, mailReady, sendMail, resetLetter } from './mail.js';
+import { hashPassword, checkPassword, newSession, dropSession, dropOtherSessions, userByToken, publicUser, sessionCookie, readCookie, touchSession, newReset, peekReset, takeReset, dropResets, cleanEmail } from './auth.js';
+import { mailConf, mailReady, sendMail, resetLetter, emailChangedLetter } from './mail.js';
 import { createGame, attachSockets, byId } from './game.js';
 import { checkName, NAME_ERROR } from '../web/js/names.js';
 import { clientIp, limiter, safeEqual, weakPassword, sameOrigin, applySecurityHeaders, audit, publicHttpsUrl } from './security.js';
@@ -49,6 +49,8 @@ const uploadLimit = limiter(60, 3600e3); // загрузок файлов от �
 const aiLimit = limiter(30, 3600e3); // запросов к ИИ от одного учителя
 const forgotIpLimit = limiter(10, 3600e3); // запросов «забыли пароль» с одного IP
 const forgotUserLimit = limiter(3, 3600e3); // писем одному пользователю в час
+const forgotMailLimit = limiter(3, 3600e3); // писем на один адрес в час (против засыпания чужого ящика)
+const forgotAllLimit = limiter(100, 3600e3); // писем со всего сайта в час (чтобы Gmail не заблокировал ящик)
 const resetFails = limiter(30, 3600e3); // неверных ссылок сброса с одного IP
 const liveLimit = 15; // одновременных игр у одного ведущего
 
@@ -220,12 +222,15 @@ on('POST', '/api/forgot', async ({ body, req }) => {
   if (!forgotIpLimit.hit(clientIp(req))) fail(429, 'Слишком много запросов. Попробуйте через час.');
   const who = str(body.login, 120).toLowerCase();
   if (who.length < 3) fail(400, 'Введите логин или почту');
-  const u = db.one("SELECT * FROM users WHERE active=1 AND email<>'' AND (login=? OR email=?)", who, who);
+  // На одну почту бывает несколько аккаунтов (братья и сёстры) — ссылки для всех в одном письме.
+  const list = db.all("SELECT id, login, email FROM users WHERE active=1 AND email<>'' AND (login=? OR email=?) LIMIT 5", who, who)
+    .filter((u) => forgotUserLimit.hit(u.id));
   // Ответ одинаковый, есть такой аккаунт или нет: так нельзя узнать чужие логины и адреса.
-  if (u && forgotUserLimit.hit(u.id)) {
-    const letter = resetLetter(u.name, `${mailConf().site}/#/reset/${newReset(u.id)}`);
-    sendMail(u.email, letter.subject, letter.text, letter.html).catch((e) => console.error('mail', e.message));
-    audit('forgot', req, `user=${u.id}`);
+  const to = list[0]?.email;
+  if (to && list.every((u) => u.email === to) && forgotMailLimit.hit(to) && forgotAllLimit.hit('all')) {
+    const letter = resetLetter(list.map((u) => ({ login: u.login, link: `${mailConf().site}/#/reset/${newReset(u.id)}` })));
+    sendMail(to, letter.subject, letter.text, letter.html).catch((e) => console.error('mail', e.message));
+    audit('forgot', req, `users=${list.map((u) => u.id).join(',')}`);
   }
   return { ok: true };
 });
@@ -270,13 +275,19 @@ on('PATCH', '/api/me', async ({ user, body, req }) => {
   if (body.email !== undefined) {
     const email = cleanEmail(body.email);
     if (email === false) fail(400, 'Почта указана неверно');
-    // Сменить уже указанную почту можно только с паролем: иначе чужой человек на устройстве увёл бы аккаунт.
-    const row = db.one('SELECT pass, email FROM users WHERE id=?', user.id);
-    if (row.email && email !== row.email) {
+    // Почту меняем только с паролем: иначе тот, кто взял чужой телефон, вписал бы свою почту и потом сбросил пароль.
+    const row = db.one('SELECT pass, email, login FROM users WHERE id=?', user.id);
+    if (email !== row.email) {
       if (!loginUserFails.hit(`pw:${user.id}`)) fail(429, 'Слишком много попыток. Подождите 15 минут.');
-      if (!(await checkPassword(String(body.oldPassword || ''), row.pass))) fail(403, 'Чтобы сменить почту, введите текущий пароль');
+      if (!(await checkPassword(String(body.oldPassword || ''), row.pass))) fail(403, 'Чтобы изменить почту, введите текущий пароль');
+      db.run('UPDATE users SET email=? WHERE id=?', email, user.id);
+      dropResets(user.id);
+      if (row.email && mailReady() && forgotMailLimit.hit(row.email)) {
+        const letter = emailChangedLetter(row.login);
+        sendMail(row.email, letter.subject, letter.text, letter.html).catch((e) => console.error('mail', e.message));
+      }
+      audit('email-change', req, `user=${user.id}`);
     }
-    db.run('UPDATE users SET email=? WHERE id=?', email, user.id);
   }
   if (body.password) {
     if (!loginUserFails.hit(`pw:${user.id}`)) fail(429, 'Слишком много попыток. Подождите 15 минут.');
@@ -286,6 +297,7 @@ on('PATCH', '/api/me', async ({ user, body, req }) => {
     if (weak) fail(400, weak);
     db.run('UPDATE users SET pass=? WHERE id=?', await hashPassword(String(body.password)), user.id);
     dropOtherSessions(user.id, readCookie(req, 'sid')); // со всех других устройств выходим
+    dropResets(user.id);
   }
   return { user: publicUser(db.one('SELECT * FROM users WHERE id=?', user.id)) };
 });
@@ -504,7 +516,7 @@ on('PATCH', '/api/admin/users/(\\d+)', async ({ user, body, params }) => {
   if (id === user.id) fail(400, 'Себя менять нельзя');
   if (body.active !== undefined) {
     db.run('UPDATE users SET active=? WHERE id=?', body.active ? 1 : 0, id);
-    if (!body.active) db.run('DELETE FROM sessions WHERE user_id=?', id);
+    if (!body.active) { db.run('DELETE FROM sessions WHERE user_id=?', id); dropResets(id); }
   }
   if (['teacher', 'admin', 'student'].includes(body.role)) db.run('UPDATE users SET role=? WHERE id=?', body.role, id);
   if (body.password) {
@@ -512,6 +524,7 @@ on('PATCH', '/api/admin/users/(\\d+)', async ({ user, body, params }) => {
     if (weak) fail(400, weak);
     db.run('UPDATE users SET pass=? WHERE id=?', await hashPassword(String(body.password)), id);
     db.run('DELETE FROM sessions WHERE user_id=?', id);
+    dropResets(id);
   }
   return { ok: true };
 });

@@ -145,7 +145,7 @@ export function emailCard(dark = false) {
   const email = h('input', { class: 'input', type: 'email', autocomplete: 'email', maxLength: 120, value: me.email || '', placeholder: 'name@gmail.com' });
   const pw = h('input', { class: 'input', type: 'password', autocomplete: 'current-password', placeholder: t('Текущий пароль') });
   const pwBox = h('div', { class: 'hidden' }, pw);
-  email.addEventListener('input', () => pwBox.classList.toggle('hidden', !me.email || email.value.trim().toLowerCase() === me.email));
+  email.addEventListener('input', () => pwBox.classList.toggle('hidden', email.value.trim().toLowerCase() === (store.me.email || '')));
   const save = async () => {
     try {
       store.me = (await api('/api/me', { method: 'PATCH', body: { email: email.value, oldPassword: pw.value } })).user;

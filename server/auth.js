@@ -76,6 +76,9 @@ export function newReset(userId) {
   return token;
 }
 
+/** Отменить все ссылки сброса пользователя (смена пароля или почты, отключение аккаунта). */
+export const dropResets = (userId) => run('DELETE FROM resets WHERE user_id=?', userId);
+
 /** Проверить код сброса, не тратя его. */
 export function peekReset(token) {
   if (!token || String(token).length > 100) return null;
