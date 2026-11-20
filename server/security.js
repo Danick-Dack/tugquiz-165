@@ -1,5 +1,5 @@
 // Защита сервера: настоящий IP клиента, ограничители частоты, заголовки безопасности, проверка паролей и источника запросов.
-import { timingSafeEqual, createHash } from 'node:crypto';
+import { timingSafeEqual, createHash, createHmac, randomBytes } from 'node:crypto';
 
 const LOOPBACK = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1']);
 
@@ -58,6 +58,70 @@ export function weakPassword(pw, login = '') {
   if (COMMON.has(low) || /^(.)\1+$/.test(p) || (login && low.includes(String(login).toLowerCase()) && login.length >= 3)) return 'Слишком простой пароль. Придумайте другой.';
   if (!/\D/.test(p) || new Set(p).size < 4) return 'Слишком простой пароль: добавьте буквы и разные символы.';
   return null;
+}
+
+/** Подсеть адреса: соседние адреса одного VPN-провайдера считаются вместе (/24 для IPv4, /48 для IPv6). */
+export function subnet(ip) {
+  const s = String(ip).replace(/^::ffff:/, '');
+  return /^\d+\.\d+\.\d+\.\d+$/.test(s) ? `${s.split('.').slice(0, 3).join('.')}.0/24` : `${s.split(':').slice(0, 3).join(':')}::/48`;
+}
+
+/**
+ * Защита входа от подбора паролей — в том числе ботами, которые меняют адрес через VPN или ботнет.
+ * Бан по IP таких не остановит, поэтому неверные пароли считаются ещё и по самому аккаунту (с любых адресов):
+ * 10 за 15 минут и 30 за сутки с незнакомых устройств, а когда по сайту идёт волна ошибок — 3 в час.
+ * Чтобы боты не могли так «запереть» чужой аккаунт, после удачного входа браузер получает подписанную
+ * метку «знакомое устройство» (cookie kd): с него владелец входит, даже когда вход с новых устройств закрыт.
+ * Проверок пароля (scrypt — дорогая операция) одновременно не больше 16: флуд не положит процессор.
+ */
+export function loginShield(secret) {
+  const ipFails = limiter(40, 10 * 60e3); // один адрес (школа за одним Wi-Fi укладывается)
+  const netFails = limiter(150, 10 * 60e3); // подсеть
+  const userFails = limiter(10, 15 * 60e3); // один аккаунт с незнакомых устройств, с любых адресов
+  const userDay = limiter(30, 864e5); // и за сутки: подбор с тысяч VPN-адресов упирается сюда
+  const userAttack = limiter(3, 3600e3); // пока сайт атакуют — ещё строже
+  const siteFails = limiter(300, 10 * 60e3); // неверных паролей по всему сайту; больше — идёт атака
+  const trustedFails = limiter(30, 15 * 60e3); // со знакомого устройства тоже не бесконечно
+  const sign = (v) => createHmac('sha256', secret).update(v).digest('base64url').slice(0, 32);
+  const trustedFor = (req, userId) => {
+    const m = (req.headers.cookie || '').match(/(?:^|;\s*)kd=(\d+)\.([\w-]{16,32})\.([\w-]{32})(?:;|$)/);
+    return Boolean(userId && m && Number(m[1]) === userId && safeEqual(m[3], sign(`${m[1]}.${m[2]}`)));
+  };
+  let busy = 0;
+  return {
+    /** Можно ли сейчас проверять пароль для этого логина. userId — id аккаунта, если такой логин есть. */
+    gate(req, login, userId) {
+      const ip = clientIp(req);
+      const net = subnet(ip);
+      const key = String(login ?? '').trim().toLowerCase().slice(0, 32);
+      const trusted = trustedFor(req, userId);
+      let blocked = null;
+      if (ipFails.blocked(ip) || netFails.blocked(net)) blocked = 'Слишком много неверных попыток из вашей сети. Подождите 15 минут.';
+      else if (trusted ? trustedFails.blocked(key) : userFails.blocked(key) || userDay.blocked(key) || (siteFails.blocked('all') && userAttack.blocked(key))) {
+        blocked = trusted ? 'Слишком много попыток. Подождите 15 минут.'
+          : 'Для этого аккаунта было слишком много неверных паролей, вход с нового устройства временно закрыт. Войдите с телефона или компьютера, где уже входили, или восстановите пароль.';
+      }
+      if (blocked) audit('login-blocked', req, `login=${key}${trusted ? ' trusted' : ''}${siteFails.blocked('all') ? ' site-under-attack' : ''}`);
+      return {
+        blocked,
+        failed() {
+          ipFails.add(ip); netFails.add(net); siteFails.add('all');
+          if (trusted) trustedFails.add(key); else { userFails.add(key); userDay.add(key); userAttack.add(key); }
+          audit('login-fail', req, `login=${key}${trusted ? ' trusted' : ''}`);
+        },
+        // Суточный счётчик не сбрасываем: иначе удачный вход владельца дарил бы боту новые 30 попыток.
+        ok() { userFails.reset(key); trustedFails.reset(key); },
+      };
+    },
+    /** Cookie «знакомое устройство» для аккаунта (ставится после удачного входа или регистрации). */
+    deviceCookie(userId, secure) {
+      const v = `${userId}.${randomBytes(18).toString('base64url')}`;
+      return `kd=${v}.${sign(v)}; Path=/api/; HttpOnly; SameSite=Strict; Max-Age=${400 * 86400}${secure ? '; Secure' : ''}`;
+    },
+    /** Все места для проверки пароля заняты — отвечаем «занято», а не копим очередь. */
+    full: () => busy >= 16,
+    async slot(fn) { busy++; try { return await fn(); } finally { busy--; } },
+  };
 }
 
 /** Запрос на изменение данных должен идти с нашего же сайта (защита от CSRF). */

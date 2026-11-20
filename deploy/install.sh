@@ -15,7 +15,8 @@ if ! command -v apt-get >/dev/null; then echo "Нужен Ubuntu или Debian (
 export DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a
 
 echo "== Пакеты"
-apt-get update -y
+# Чужой репозиторий на сервере может сменить название — это не повод прерывать установку.
+apt-get update -y --allow-releaseinfo-change-label || apt-get update -y || echo "apt-get update с ошибкой — продолжаю с имеющимися списками пакетов"
 apt-get install -y curl ca-certificates gnupg
 
 DOMAIN="${1:-}"
@@ -128,7 +129,8 @@ server {
   large_client_header_buffers 4 16k;
   limit_conn tq_conn 1500;
   # Вход и регистрация: не больше 30 попыток в минуту с одного адреса (школа за одним Wi-Fi укладывается).
-  location ~ ^/api/(login|register)\$ {
+  location ~ ^/api/(login|register|forgot|reset)\$ {
+    access_log /var/log/nginx/tugquiz-auth.log;
     limit_req zone=tq_auth burst=30 nodelay;
     limit_req_status 429;
     include snippets/tugquiz-proxy.conf;
@@ -169,6 +171,30 @@ EOF
     echo "Проверьте, что $DOMAIN указывает на этот сервер (nslookup $DOMAIN) и порт 80 открыт у хостера."
   fi
   nginx -t && systemctl reload nginx
+  echo "== fail2ban: бан адресов, которые продолжают долбить вход после отказов"
+  # Отказ 429 значит, что лимит уже исчерпан; кто шлёт сотни таких запросов за 10 минут — бот, его режет файрвол.
+  # Порог высокий (600), чтобы школа за одним Wi-Fi не попала под бан. Ботов с тысяч VPN-адресов держат лимиты на аккаунт в самом сайте.
+  apt-get install -y fail2ban >/dev/null || true
+  if [ -d /etc/fail2ban ]; then
+    cat > /etc/fail2ban/filter.d/sl165-auth.conf <<'F2B'
+[Definition]
+failregex = ^<HOST> \S+ \S+ \[[^\]]+\] "POST /api/(?:login|register|forgot|reset)[^"]*" 429 
+ignoreregex =
+F2B
+    touch /var/log/nginx/tugquiz-auth.log
+    cat > /etc/fail2ban/jail.d/tugquiz-auth.conf <<'F2B'
+[tugquiz-auth]
+enabled  = true
+port     = http,https
+filter   = sl165-auth
+logpath  = /var/log/nginx/tugquiz-auth.log
+maxretry = 600
+findtime = 600
+bantime  = 3600
+F2B
+    systemctl enable fail2ban >/dev/null 2>&1 || true
+    systemctl restart fail2ban || echo "fail2ban не перезапустился — проверьте: sudo fail2ban-client status"
+  fi
 else
   echo "== Caddy + HTTPS"
   if ! command -v caddy >/dev/null; then
@@ -195,5 +221,5 @@ fi
 echo
 echo "Готово: https://$DOMAIN"
 echo "(если сертификат ещё выпускается, подождите минуту)"
-echo "Код для регистрации учителей: $(journalctl -u tugquiz -n 50 --no-pager | grep -o 'SL165-[0-9]*' | tail -1)"
+echo "Код для регистрации учителей: $(journalctl -u tugquiz -n 50 --no-pager | grep -oE 'SL165-[0-9A-Z]+' | tail -1)"
 echo "Первый зарегистрированный на сайте станет администратором."

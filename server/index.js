@@ -15,7 +15,7 @@ import { hashPassword, checkPassword, newSession, dropSession, dropOtherSessions
 import { mailConf, mailReady, sendMail, resetLetter, emailChangedLetter } from './mail.js';
 import { createGame, attachSockets, byId } from './game.js';
 import { checkName, NAME_ERROR } from '../web/js/names.js';
-import { clientIp, limiter, safeEqual, weakPassword, sameOrigin, applySecurityHeaders, audit, publicHttpsUrl } from './security.js';
+import { clientIp, limiter, safeEqual, weakPassword, sameOrigin, applySecurityHeaders, audit, publicHttpsUrl, loginShield, subnet } from './security.js';
 
 // Ни одна ошибка не должна ронять сервер: пишем в журнал и продолжаем работать.
 process.on('uncaughtException', (e) => console.error('uncaughtException', e));
@@ -40,11 +40,17 @@ const UPLOAD_CSP = "default-src 'none'; img-src 'self'; media-src 'self'; style-
 
 // Ограничители частоты (по IP клиента; за школьным Wi-Fi много учеников делят один адрес, поэтому числа щедрые).
 const apiLimit = limiter(1500, 60e3); // любые запросы к API
-const loginIpFails = limiter(40, 10 * 60e3); // неудачные входы с одного IP
-const loginUserFails = limiter(20, 15 * 60e3); // неудачные входы в один аккаунт (против подбора с разных IP)
+// Подбор паролей (в том числе ботами через VPN) — см. loginShield в security.js. Ключ подписи «знакомых устройств» живёт в базе.
+if (!db.getSetting('kd_secret')) db.setSetting('kd_secret', randomBytes(32).toString('hex'));
+const shield = loginShield(db.getSetting('kd_secret'));
+const pwChecks = limiter(20, 15 * 60e3); // проверок текущего пароля в профиле (смена почты/пароля)
 const registerLimit = limiter(80, 3600e3); // регистрации с одного IP
+const registerNet = limiter(200, 3600e3); // с одной подсети (VPN выдаёт соседние адреса)
+const registerAll = limiter(1500, 3600e3); // и со всего сайта
 const inviteIpFails = limiter(8, 3600e3); // неверные коды учителя с одного IP
-const inviteAllFails = limiter(80, 3600e3); // и вообще по всему сайту
+// Код учителя по всему сайту: боты с тысяч VPN-адресов упираются сюда (10 в час и 30 в сутки).
+const inviteAllFails = limiter(10, 3600e3);
+const inviteDayFails = limiter(30, 864e5);
 const uploadLimit = limiter(60, 3600e3); // загрузок файлов от одного учителя
 const aiLimit = limiter(30, 3600e3); // запросов к ИИ от одного учителя
 const forgotIpLimit = limiter(10, 3600e3); // запросов «забыли пароль» с одного IP
@@ -80,16 +86,8 @@ async function readJson(req, limit = 1_000_000) {
   return data;
 }
 
-// ---------- защита входа от перебора ----------
-function loginGuard(req, login) {
-  const ip = clientIp(req);
-  const key = str(login, 32).toLowerCase();
-  if (loginIpFails.blocked(ip) || loginUserFails.blocked(key)) { audit('login-blocked', req, `login=${key}`); fail(429, 'Слишком много попыток. Подождите 15 минут.'); }
-  return {
-    failed: () => { loginIpFails.add(ip); loginUserFails.add(key); audit('login-fail', req, `login=${key}`); },
-    ok: () => loginUserFails.reset(key),
-  };
-}
+/** Проверить пароль, не перегружая процессор: при флуде лишние запросы получают «занято». */
+const checkPw = (pw, hash) => (shield.full() ? fail(503, 'Сервер сейчас занят. Повторите через минуту.') : shield.slot(() => checkPassword(pw, hash)));
 
 // ---------- квизы ----------
 const quizRow = (r) => r && { ...r, questions: JSON.parse(r.questions) };
@@ -177,7 +175,7 @@ on('POST', '/api/subjects', ({ user, body }) => {
 
 on('POST', '/api/register', async ({ body, req, res }) => {
   const ip = clientIp(req);
-  if (!registerLimit.hit(ip)) { audit('register-flood', req); fail(429, 'Слишком много регистраций с этого адреса. Попробуйте позже.'); }
+  if (!registerLimit.hit(ip) || !registerNet.hit(subnet(ip)) || !registerAll.hit('all')) { audit('register-flood', req); fail(429, 'Слишком много регистраций с этого адреса. Попробуйте позже.'); }
   const first = !db.one('SELECT 1 FROM users');
   const role = first ? 'admin' : body.role === 'teacher' ? 'teacher' : 'student';
   const login = str(body.login, 32);
@@ -189,9 +187,9 @@ on('POST', '/api/register', async ({ body, req, res }) => {
   const weak = weakPassword(password, login);
   if (weak) fail(400, weak);
   if (role === 'teacher') {
-    if (inviteIpFails.blocked(ip) || inviteAllFails.blocked('all')) { audit('invite-blocked', req); fail(429, 'Слишком много неверных кодов. Попробуйте через час.'); }
+    if (inviteIpFails.blocked(ip) || inviteAllFails.blocked('all') || inviteDayFails.blocked('all')) { audit('invite-blocked', req); fail(429, 'Слишком много неверных кодов. Попробуйте позже или уточните код у администратора.'); }
     if (!safeEqual(str(body.invite).toUpperCase(), String(db.getSetting('invite_code')).toUpperCase())) {
-      inviteIpFails.add(ip); inviteAllFails.add('all'); audit('invite-fail', req);
+      inviteIpFails.add(ip); inviteAllFails.add('all'); inviteDayFails.add('all'); audit('invite-fail', req);
       fail(403, 'Неверный код учителя. Его выдаёт администратор.');
     }
   }
@@ -202,17 +200,18 @@ on('POST', '/api/register', async ({ body, req, res }) => {
   if (db.one('SELECT 1 FROM users WHERE login=?', login)) fail(409, 'Такой логин уже занят');
   const id = Number(db.run('INSERT INTO users(role,login,name,pass,class_name,email,created) VALUES(?,?,?,?,?,?,?)',
     role, login, name, await hashPassword(password), cls, email, Date.now()).lastInsertRowid);
-  res.setHeader('Set-Cookie', sessionCookie(newSession(id), isSecure(req)));
+  res.setHeader('Set-Cookie', [sessionCookie(newSession(id), isSecure(req)), shield.deviceCookie(id, isSecure(req))]);
   return { user: publicUser(db.one('SELECT * FROM users WHERE id=?', id)) };
 });
 
 on('POST', '/api/login', async ({ body, req, res }) => {
-  const guard = loginGuard(req, body.login);
   const u = db.one('SELECT * FROM users WHERE login=?', str(body.login, 32));
-  if (!(await checkPassword(String(body.password ?? ''), u?.pass)) || !u) { guard.failed(); fail(401, 'Неверный логин или пароль'); }
+  const gate = shield.gate(req, body.login, u?.id);
+  if (gate.blocked) fail(429, gate.blocked);
+  if (!(await checkPw(String(body.password ?? ''), u?.pass)) || !u) { gate.failed(); fail(401, 'Неверный логин или пароль'); }
   if (!u.active) fail(403, 'Аккаунт отключён администратором');
-  guard.ok();
-  res.setHeader('Set-Cookie', sessionCookie(newSession(u.id), isSecure(req)));
+  gate.ok();
+  res.setHeader('Set-Cookie', [sessionCookie(newSession(u.id), isSecure(req)), shield.deviceCookie(u.id, isSecure(req))]);
   return { user: publicUser(u) };
 });
 
@@ -247,7 +246,7 @@ on('POST', '/api/reset', async ({ body, req, res }) => {
   if (weak) fail(400, weak);
   if (takeReset(token) !== id) fail(400, 'Ссылка уже использована');
   db.run('UPDATE users SET pass=? WHERE id=?', await hashPassword(password), id);
-  res.setHeader('Set-Cookie', sessionCookie(newSession(id), isSecure(req))); // заодно выходим со всех других устройств
+  res.setHeader('Set-Cookie', [sessionCookie(newSession(id), isSecure(req)), shield.deviceCookie(id, isSecure(req))]); // заодно выходим со всех других устройств
   audit('reset', req, `user=${id}`);
   return { user: publicUser(u) };
 });
@@ -278,8 +277,8 @@ on('PATCH', '/api/me', async ({ user, body, req }) => {
     // Почту меняем только с паролем: иначе тот, кто взял чужой телефон, вписал бы свою почту и потом сбросил пароль.
     const row = db.one('SELECT pass, email, login FROM users WHERE id=?', user.id);
     if (email !== row.email) {
-      if (!loginUserFails.hit(`pw:${user.id}`)) fail(429, 'Слишком много попыток. Подождите 15 минут.');
-      if (!(await checkPassword(String(body.oldPassword || ''), row.pass))) fail(403, 'Чтобы изменить почту, введите текущий пароль');
+      if (!pwChecks.hit(user.id)) fail(429, 'Слишком много попыток. Подождите 15 минут.');
+      if (!(await checkPw(String(body.oldPassword || ''), row.pass))) fail(403, 'Чтобы изменить почту, введите текущий пароль');
       db.run('UPDATE users SET email=? WHERE id=?', email, user.id);
       dropResets(user.id);
       if (row.email && mailReady() && forgotMailLimit.hit(row.email)) {
@@ -290,9 +289,9 @@ on('PATCH', '/api/me', async ({ user, body, req }) => {
     }
   }
   if (body.password) {
-    if (!loginUserFails.hit(`pw:${user.id}`)) fail(429, 'Слишком много попыток. Подождите 15 минут.');
+    if (!pwChecks.hit(user.id)) fail(429, 'Слишком много попыток. Подождите 15 минут.');
     const row = db.one('SELECT pass FROM users WHERE id=?', user.id);
-    if (!(await checkPassword(String(body.oldPassword || ''), row.pass))) fail(403, 'Старый пароль неверный');
+    if (!(await checkPw(String(body.oldPassword || ''), row.pass))) fail(403, 'Старый пароль неверный');
     const weak = weakPassword(body.password, user.login);
     if (weak) fail(400, weak);
     db.run('UPDATE users SET pass=? WHERE id=?', await hashPassword(String(body.password)), user.id);
@@ -478,7 +477,7 @@ on('PUT', '/api/admin/settings', ({ user, body, req }) => {
   }
   if (body.invite_code !== undefined) {
     const code = str(body.invite_code, 32);
-    if (code.length < 4) fail(400, 'Код учителя — минимум 4 символа');
+    if (code.length < 8) fail(400, 'Код учителя — минимум 8 символов: короткий код боты подбирают');
     db.setSetting('invite_code', code);
   }
   if (body.ai) {
