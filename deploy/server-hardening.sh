@@ -6,7 +6,7 @@ set -euo pipefail
 
 echo "== apt: снова получать обновления безопасности"
 # Чужой PPA (ondrej/php) сменил название, и apt перестал обновлять списки пакетов — принимаем смену названия.
-apt-get update -y --allow-releaseinfo-change-label >/dev/null && echo "списки пакетов обновлены"
+DEBIAN_FRONTEND=noninteractive apt-get update -y --allow-releaseinfo-change-label </dev/null >/dev/null && echo "списки пакетов обновлены"
 
 echo "== nginx: только TLS 1.2/1.3, версия nginx не показывается"
 sed -i -E 's/^(\s*)ssl_protocols .*/\1ssl_protocols TLSv1.2 TLSv1.3;/' /etc/nginx/nginx.conf
@@ -27,7 +27,7 @@ EOF
 sshd -t && systemctl reload ssh
 
 echo "== fail2ban: SSH-подбор — бан на час, повторные нарушители — на неделю"
-apt-get install -y fail2ban >/dev/null
+DEBIAN_FRONTEND=noninteractive apt-get install -y fail2ban </dev/null >/dev/null
 cat > /etc/fail2ban/jail.d/10-hardening.conf <<'EOF'
 [sshd]
 enabled  = true
