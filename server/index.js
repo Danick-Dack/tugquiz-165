@@ -465,7 +465,8 @@ on('PUT', '/api/admin/settings', ({ user, body, req }) => {
     const host = str(body.mail.host, 120).toLowerCase();
     const port = Number(body.mail.port) || 465;
     const mailUser = cleanEmail(body.mail.user);
-    if (!/^[a-z0-9.-]+\.[a-z]{2,}$/.test(host)) fail(400, 'Укажите почтовый сервер, например smtp.gmail.com');
+    // Только публичный почтовый сервер: не localhost и не внутренняя сеть (иначе через «проверку почты» можно прощупывать сервер изнутри).
+    if (!/^[a-z0-9.-]+\.[a-z]{2,}$/.test(host) || !publicHttpsUrl(`https://${host}`)) fail(400, 'Укажите почтовый сервер, например smtp.gmail.com');
     if (![465, 587].includes(port)) fail(400, 'Порт — 465 или 587');
     if (!mailUser) fail(400, 'Укажите адрес почтового ящика');
     // Адрес сайта для ссылок в письмах берём из браузера администратора, а не из заголовка Host (его можно подделать).

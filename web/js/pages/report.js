@@ -21,7 +21,7 @@ function ropeChart(rope, names) {
     <text x="${P + 6}" y="${H - P - 8}" font-size="12" font-weight="800" fill="${BLUE}">${esc(names[1])}</text>
     <line x1="${P}" x2="${W - P}" y1="${H / 2}" y2="${H / 2}" stroke="#94a3b8" stroke-dasharray="4 4"/>
     <polyline points="${pts}" fill="none" stroke="${GREEN}" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>
-    ${rope.map((v, i) => `<circle cx="${x(i).toFixed(1)}" cy="${y(v).toFixed(1)}" r="4" fill="${v < 0 ? RED : v > 0 ? BLUE : '#94a3b8'}"><title>${i}: ${v}</title></circle>`).join('')}
+    ${rope.map((v, i) => `<circle cx="${x(i).toFixed(1)}" cy="${y(v).toFixed(1)}" r="4" fill="${v < 0 ? RED : v > 0 ? BLUE : '#94a3b8'}"><title>${i}: ${Number(v) || 0}</title></circle>`).join('')}
   </svg>`;
 }
 
