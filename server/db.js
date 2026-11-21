@@ -103,7 +103,8 @@ export const setSetting = (key, value) =>
 
 export const now = () => Date.now();
 
-if (getSetting('invite_code') === null) setSetting('invite_code', `SL165-${Array.from({ length: 8 }, () => 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'[randomInt(31)]).join('')}`);
+// Старые коды из 4 цифр подбираются перебором, поэтому при запуске заменяем их на длинные.
+if (getSetting('invite_code') === null || /^SL165-\d{4}$/i.test(getSetting('invite_code'))) setSetting('invite_code', `SL165-${Array.from({ length: 8 }, () => 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'[randomInt(31)]).join('')}`);
 if (!one('SELECT 1 FROM quizzes WHERE template=1')) {
   tx(() => {
     for (const t of TEMPLATES) {
