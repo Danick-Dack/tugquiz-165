@@ -1,0 +1,32 @@
+# Каждые 15 минут проверяет сайты. Если что-то упало или сертификат скоро истечёт, запуск краснеет
+# и GitHub присылает письмо на почту владельца репозитория.
+name: Сайты работают
+on:
+  schedule: [{ cron: '*/15 * * * *' }]
+  workflow_dispatch:
+permissions: {}
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Проверка
+        run: |
+          fail=0
+          check() { # адрес, путь API (пусто — только главная)
+            host=$1; api=$2; ok=
+            for try in 1 2 3; do # три попытки: разовый сбой сети не должен будить
+              code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 "https://$host/") || code=000
+              if [ "$code" = 200 ] && { [ -z "$api" ] || curl -sf --max-time 20 "https://$host$api" | head -c1 | grep -q '{'; }; then ok=1; break; fi
+              sleep 20
+            done
+            [ -n "$ok" ] && echo "OK   $host" || { echo "::error::$host не отвечает (код $code)"; fail=1; }
+            end=$(echo | openssl s_client -connect "$host:443" -servername "$host" 2>/dev/null | openssl x509 -noout -enddate | cut -d= -f2)
+            days=$(( ($(date -d "$end" +%s) - $(date +%s)) / 86400 ))
+            echo "     сертификат: ещё $days дн."
+            [ "$days" -ge 14 ] || { echo "::error::$host: сертификат истекает через $days дн."; fail=1; }
+          }
+          check tugquiz.mywire.org /api/me
+          check neuroprep.mywire.org /api/me
+          check ryadom-kz.pages.dev
+          exit $fail
