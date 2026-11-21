@@ -73,6 +73,7 @@ After=network.target
 User=tugquiz
 WorkingDirectory=$APP_DIR
 Environment=NODE_ENV=production PORT=$PORT HOST=127.0.0.1 TQ_DATA=$DATA_DIR
+EnvironmentFile=-/etc/tugquiz.env
 ExecStart=$(command -v node) server/index.js
 Restart=always
 RestartSec=3

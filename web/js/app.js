@@ -112,7 +112,7 @@ export async function render() {
 async function boot() {
   try {
     const r = await api('/api/me');
-    Object.assign(store, { me: r.user, meta: r.meta, needsSetup: r.needsSetup, mail: r.mail, kicked: r.kicked });
+    Object.assign(store, { me: r.user, meta: r.meta, needsSetup: r.needsSetup, mail: r.mail, kicked: r.kicked, captcha: r.captcha });
     if (r.kicked) setTimeout(() => toast(t('В аккаунт вошли на другом устройстве'), 'err'), 300);
   } catch (e) {
     fill(app, h('div', { class: 'wrap empty' }, h('h2', null, t('Сервер недоступен')), h('p', null, e.message)));

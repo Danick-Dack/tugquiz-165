@@ -169,3 +169,24 @@ export function publicHttpsUrl(raw) {
   if (h.includes(':') || h.startsWith('[')) return false; // IPv6-адреса не нужны для API ИИ
   return true;
 }
+
+/**
+ * Капча Cloudflare Turnstile (бесплатная). Ключи берутся из окружения (TURNSTILE_SITE / TURNSTILE_SECRET);
+ * без них проверка выключена. Если сам Cloudflare недоступен, пропускаем: остальные защиты входа продолжают работать.
+ */
+export function turnstile(site = '', secret = '') {
+  const on = Boolean(site && secret);
+  return {
+    site: on ? site : '',
+    async ok(token, ip) {
+      if (!on) return true;
+      if (typeof token !== 'string' || !token || token.length > 2048) return false;
+      try {
+        const r = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
+          method: 'POST', body: new URLSearchParams({ secret, response: token, remoteip: String(ip || '') }), signal: AbortSignal.timeout(5000),
+        });
+        return (await r.json()).success === true;
+      } catch { return true; }
+    },
+  };
+}

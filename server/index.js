@@ -16,7 +16,7 @@ import { hashPassword, checkPassword, newSession, dropSession, dropOtherSessions
 import { mailConf, mailReady, sendMail, resetLetter, emailChangedLetter } from './mail.js';
 import { createGame, attachSockets, byId } from './game.js';
 import { checkName, NAME_ERROR } from '../web/js/names.js';
-import { clientIp, limiter, safeEqual, weakPassword, sameOrigin, applySecurityHeaders, audit, publicHttpsUrl, loginShield, subnet } from './security.js';
+import { clientIp, limiter, safeEqual, weakPassword, sameOrigin, applySecurityHeaders, audit, publicHttpsUrl, loginShield, subnet, turnstile } from './security.js';
 
 // Ни одна ошибка не должна ронять сервер: пишем в журнал и продолжаем работать.
 process.on('uncaughtException', (e) => console.error('uncaughtException', e));
@@ -31,9 +31,9 @@ const TYPES = {
   '.webm': 'video/webm', '.webmanifest': 'application/manifest+json', '.txt': 'text/plain; charset=utf-8',
 };
 const CSP = [
-  "default-src 'self'", "script-src 'self'", "style-src 'self' 'unsafe-inline'",
+  "default-src 'self'", "script-src 'self' https://challenges.cloudflare.com", "style-src 'self' 'unsafe-inline'",
   "font-src 'self' data:", "img-src 'self' data: blob: https:", "media-src 'self' blob: https:",
-  'frame-src https://www.youtube-nocookie.com https://player.vimeo.com', "connect-src 'self' {WS}",
+  'frame-src https://www.youtube-nocookie.com https://player.vimeo.com https://challenges.cloudflare.com', "connect-src 'self' {WS}",
   "object-src 'none'", "base-uri 'self'", "form-action 'self'", "frame-ancestors 'self'",
 ].join('; ');
 // На загруженные файлы, открытые напрямую, скрипты не действуют вообще.
@@ -61,8 +61,10 @@ const forgotAllLimit = limiter(100, 3600e3); // писем со всего са�
 const resetFails = limiter(30, 3600e3); // неверных ссылок сброса с одного IP
 const liveLimit = 15; // одновременных игр у одного ведущего
 
+const captcha = turnstile(process.env.TURNSTILE_SITE, process.env.TURNSTILE_SECRET);
 class HttpError extends Error { constructor(status, message) { super(message); this.status = status; } }
 const fail = (status, message) => { throw new HttpError(status, message); };
+const needHuman = async (body, req) => { if (!(await captcha.ok(body.cf, clientIp(req)))) fail(400, 'Не удалось подтвердить, что вы не робот. Обновите страницу и попробуйте ещё раз.'); };
 const str = (v, max = 200) => String(v ?? '').trim().slice(0, max);
 
 const userFromReq = (req) => userByToken(readCookie(req, 'sid'));
@@ -157,7 +159,7 @@ on('GET', '/api/me', ({ user, req, res }) => {
   // Cookie есть, а сессии нет — в аккаунт вошли на другом устройстве (или сменили пароль).
   const kicked = !user && Boolean(token);
   if (kicked) res.setHeader('Set-Cookie', sessionCookie('', isSecure(req)));
-  return { user, kicked, needsSetup: !db.one('SELECT 1 FROM users'), meta: siteMeta(), mail: mailReady() };
+  return { user, kicked, needsSetup: !db.one('SELECT 1 FROM users'), meta: siteMeta(), mail: mailReady(), captcha: captcha.site };
 });
 
 on('POST', '/api/subjects', ({ user, body }) => {
@@ -175,6 +177,7 @@ on('POST', '/api/subjects', ({ user, body }) => {
 });
 
 on('POST', '/api/register', async ({ body, req, res }) => {
+  await needHuman(body, req);
   const ip = clientIp(req);
   if (!registerLimit.hit(ip) || !registerNet.hit(subnet(ip)) || !registerAll.hit('all')) { audit('register-flood', req); fail(429, 'Слишком много регистраций с этого адреса. Попробуйте позже.'); }
   const first = !db.one('SELECT 1 FROM users');
@@ -206,6 +209,7 @@ on('POST', '/api/register', async ({ body, req, res }) => {
 });
 
 on('POST', '/api/login', async ({ body, req, res }) => {
+  await needHuman(body, req);
   const u = db.one('SELECT * FROM users WHERE login=?', str(body.login, 32));
   const gate = shield.gate(req, body.login, u?.id);
   if (gate.blocked) fail(429, gate.blocked);
@@ -218,6 +222,7 @@ on('POST', '/api/login', async ({ body, req, res }) => {
 
 // ---------- забыли пароль ----------
 on('POST', '/api/forgot', async ({ body, req }) => {
+  await needHuman(body, req);
   if (!mailReady()) fail(503, 'Восстановление по почте пока не настроено. Попросите администратора или учителя сбросить пароль.');
   if (!forgotIpLimit.hit(clientIp(req))) fail(429, 'Слишком много запросов. Попробуйте через час.');
   const who = str(body.login, 120).toLowerCase();
