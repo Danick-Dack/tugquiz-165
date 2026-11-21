@@ -1,6 +1,7 @@
 // HTTP-сервер TugQuiz: API, раздача сайта и загруженных файлов, WebSocket для живых игр.
 import http from 'node:http';
-import { createReadStream, createWriteStream, statSync } from 'node:fs';
+import { createReadStream, createWriteStream, statSync, readFileSync } from 'node:fs';
+import { brotliCompressSync, gzipSync, constants as zc } from 'node:zlib';
 import { unlink, rename } from 'node:fs/promises';
 import { randomBytes } from 'node:crypto';
 import path from 'node:path';
@@ -576,7 +577,48 @@ function serveStatic(req, res, pathname) {
   if (rel.split(/[/\\]/).some((part) => part.startsWith('.'))) { res.writeHead(404); return res.end(); } // .git, .env и прочие скрытые файлы
   const file = path.join(WEB, rel);
   if (!file.startsWith(WEB + path.sep)) { res.writeHead(403); return res.end(); }
-  serveFile(req, res, file, rel.startsWith('vendor'));
+  const f = loadWeb(file);
+  if (!f) return serveFile(req, res, file, false); // видео и прочее крупное — потоком, с поддержкой Range
+  // Файлы сайта: из памяти, сжатые brotli/gzip, с ETag — повторный заход телефона получает «304, не изменилось».
+  const headers = { 'Content-Type': f.type, ETag: f.etag, 'Cache-Control': rel.startsWith('vendor') ? 'public, max-age=31536000, immutable' : 'no-cache', Vary: 'Accept-Encoding' };
+  if (req.headers['if-none-match'] === f.etag) { res.writeHead(304, headers); return res.end(); }
+  const ae = String(req.headers['accept-encoding'] || '');
+  let body = f.raw;
+  if (f.br && /\bbr\b/.test(ae)) { body = f.br; headers['Content-Encoding'] = 'br'; } else if (f.gz && /\bgzip\b/.test(ae)) { body = f.gz; headers['Content-Encoding'] = 'gzip'; }
+  headers['Content-Length'] = body.length;
+  res.writeHead(200, headers);
+  res.end(req.method === 'HEAD' ? undefined : body);
+}
+
+// Кэш файлов сайта в памяти (весь сайт ~2 МБ). Файл изменился на диске — кэш обновится сам (по времени и размеру).
+const webCache = new Map();
+function loadWeb(file) {
+  let st;
+  try { st = statSync(file); } catch { return null; }
+  if (!st.isFile() || st.size > 2e6) return null;
+  const key = `${st.mtimeMs}-${st.size}`;
+  const hit = webCache.get(file);
+  if (hit?.key === key) return hit;
+  const type = TYPES[path.extname(file).toLowerCase()] || 'application/octet-stream';
+  if (/^(video|audio)\//.test(type)) return null;
+  const raw = readFileSync(file);
+  const text = /^(text|application\/(json|manifest)|image\/svg)/.test(type) && raw.length > 600;
+  const entry = {
+    key, type, raw, etag: `"${st.size.toString(36)}-${Math.round(st.mtimeMs).toString(36)}"`,
+    br: text ? brotliCompressSync(raw, { params: { [zc.BROTLI_PARAM_QUALITY]: 10 } }) : null,
+    gz: text ? gzipSync(raw, { level: 9 }) : null,
+  };
+  webCache.set(file, entry);
+  return entry;
+}
+
+/** Ответ API. Крупные ответы (списки, отчёты) сжимаем: по мобильной сети это в разы быстрее. */
+function sendJson(req, res, result) {
+  let out = Buffer.from(JSON.stringify(result ?? null));
+  const headers = { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', Vary: 'Accept-Encoding' };
+  if (out.length > 1400 && /\bgzip\b/.test(String(req.headers['accept-encoding'] || ''))) { out = gzipSync(out, { level: 6 }); headers['Content-Encoding'] = 'gzip'; }
+  res.writeHead(200, { ...headers, 'Content-Length': out.length });
+  res.end(out);
 }
 
 async function handle(req, res) {
@@ -598,10 +640,7 @@ async function handle(req, res) {
     }
     const body = req.method === 'GET' || isUpload ? {} : await readJson(req, url.pathname === '/api/ai/generate' ? 8e6 : 1e6);
     const result = await route[2]({ req, res, url, body, user: userFromReq(req), params: url.pathname.match(route[1]).slice(1) });
-    if (!res.headersSent) {
-      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
-      res.end(JSON.stringify(result ?? null));
-    }
+    if (!res.headersSent) sendJson(req, res, result);
   } catch (e) {
     if (!(e instanceof HttpError)) console.error(e);
     if (res.headersSent) return res.end();
