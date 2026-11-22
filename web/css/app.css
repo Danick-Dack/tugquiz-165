@@ -586,6 +586,8 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 14px; }
 .streak-big svg { width: 18px; height: 18px; stroke-width: 1.75; }
 @keyframes pop { from { opacity: 0; transform: scale(.6); } }
 @media (prefers-reduced-motion: reduce) { .react .big-mark, .mode-card { animation: none !important; transition: none !important; } }
+/* Энергосбережение и «убрать анимации» на телефоне: всё доигрывает мгновенно (без задержек), конечное состояние сохраняется. */
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; animation-delay: 0s !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; transition-delay: 0s !important; scroll-behavior: auto !important; } .tug .dust { display: none; } .confetti { display: none; } .spinner { animation-duration: .8s !important; animation-iteration-count: infinite !important; } .wait-dots::after { animation: none !important; } }
 @media (max-width: 760px) {
   .badges { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px 4px; }
   .badge-big { width: auto; font-size: 12px; }

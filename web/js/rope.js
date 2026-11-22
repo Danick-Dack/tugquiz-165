@@ -11,7 +11,10 @@ const XS = [190, 256, 322]; // ступни игроков левой коман
 const ROPE = { x0: 168, x1: 832, y: 211 };
 const COLORS = { A: ['#cf3b40', '#8f1f25'], B: ['#3559c7', '#1f368a'] };
 const GOLD = '#e7b52c';
-const reduce = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+// Режим читаем каждый кадр: энергосбережение на телефоне включают и посреди игры.
+const reduceQ = typeof matchMedia === 'function' ? matchMedia('(prefers-reduced-motion: reduce)') : null;
+let reduce = !!reduceQ?.matches;
+reduceQ?.addEventListener?.('change', (e) => { reduce = e.matches; });
 
 // Орнамент «қошқар мүйіз»: пара рогов вверх и пара вниз, плитка 48×20.
 export const HORNS = 'M12 19V11M12 11C12 5 8 3 5 3 1.5 3 .5 7 2.5 9 4 10.5 6.5 9.5 6 7.5M12 11C12 5 16 3 19 3 22.5 3 23.5 7 21.5 9 20 10.5 17.5 9.5 18 7.5'
