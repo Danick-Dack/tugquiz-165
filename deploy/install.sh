@@ -136,6 +136,8 @@ server {
     limit_req_status 429;
     include snippets/tugquiz-proxy.conf;
   }
+  # Обновления «Журнал+» и «SL165 Турникеты» (/apps/), если сниппет есть на сервере.
+  include snippets/sl-apps*.conf;
   location / {
     include snippets/tugquiz-proxy.conf;
   }
