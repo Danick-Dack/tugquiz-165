@@ -34,6 +34,15 @@ export const SUBJECTS = {
   gen: ['Общие знания', 'Жалпы білім', '#0d9488'],
 };
 
+// Английские названия встроенных предметов (для интерфейса на английском).
+export const SUBJECT_EN = {
+  alg: 'Algebra', geom: 'Geometry', mat: 'Mathematics', fiz: 'Physics', prf: 'Practical physics', kaz: 'Kazakh language & literature',
+  rus: 'Russian language', rlit: 'Russian literature', eng: 'English language', istk: 'History of Kazakhstan', vist: 'World history',
+  geo: 'Geography', bio: 'Biology', him: 'Chemistry', inf: 'Computer science', prog: 'Programming', fk: 'Physical education',
+  hud: 'Art & crafts', kl: 'Class hour', prav: 'Basics of law', nvp: 'Basic military training', avto: 'Auto skills', fr: 'French language',
+  de: 'German language', nach: 'Primary school', psy: 'Psychology', muz: 'Music', sam: 'Self-knowledge', est: 'Natural science', gen: 'General knowledge',
+};
+
 // Цвета для предметов, которые добавляют сами учителя.
 export const CUSTOM_COLORS = ['#0f766e', '#9333ea', '#b45309', '#1d4ed8', '#be123c', '#4d7c0f', '#0369a1', '#a21caf'];
 
@@ -44,7 +53,7 @@ export const LETTERS = ['А', 'Ә', 'Б', 'В', 'Г', 'Д', 'Е', 'Ж', 'З', '�
 export const isClass = (c) => typeof c === 'string' && /^(?:[1-9]|1[0-2])[А-ЯӘІҢҒҮҰҚӨҺ]?$/u.test(c);
 
 export const meta = (custom = []) => ({
-  subjects: [...Object.entries(SUBJECTS).map(([key, [ru, kk, color]]) => ({ key, ru, kk, color })), ...custom],
+  subjects: [...Object.entries(SUBJECTS).map(([key, [ru, kk, color]]) => ({ key, ru, kk, en: SUBJECT_EN[key], color })), ...custom],
   grades: GRADES,
   letters: LETTERS,
 });

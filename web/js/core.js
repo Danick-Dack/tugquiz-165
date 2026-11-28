@@ -38,7 +38,7 @@ export async function api(path, { method = 'GET', body, raw } = {}) {
     body: raw || (body ? JSON.stringify(body) : undefined),
   });
   const data = await res.json().catch(() => null);
-  if (!res.ok) throw new Error(data?.error || `${t('Ошибка')} ${res.status}`);
+  if (!res.ok) throw new Error(data?.error ? t(data.error) : `${t('Ошибка')} ${res.status}`);
   return data;
 }
 
@@ -47,7 +47,7 @@ export const isTeacher = () => ['teacher', 'admin'].includes(store.me?.role);
 
 export function subj(key) {
   const s = store.meta?.subjects.find((x) => x.key === key) || { ru: '—', kk: '—', color: '#64748b' };
-  return { name: lang() === 'kk' ? s.kk : s.ru, color: s.color };
+  return { name: s[lang()] || s.ru, color: s.color };
 }
 /** Класс ученика: номер 1–12 и буква. Возвращает элемент со свойством value (например «7А»). */
 export function classPicker(value = '', onChange, style = {}) {
@@ -72,6 +72,7 @@ export function fmtDate(ms, withTime = true) {
   const time = d.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
   // Браузеры плохо знают казахскую локаль, поэтому месяцы пишем сами.
   if (lang() === 'kk') return withTime ? `${d.getDate()} ${KK_MONTHS[d.getMonth()].slice(0, 3)}., ${time}` : `${d.getFullYear()} ж. ${d.getDate()} ${KK_MONTHS[d.getMonth()]}`;
+  if (lang() === 'en') return d.toLocaleString('en-GB', withTime ? { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' } : { day: 'numeric', month: 'long', year: 'numeric' });
   return d.toLocaleString('ru-RU', withTime ? { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' } : { day: 'numeric', month: 'long', year: 'numeric' });
 }
 export const fmtDur = (sec) => `${Math.floor(sec / 60)}:${String(Math.round(sec % 60)).padStart(2, '0')}`;

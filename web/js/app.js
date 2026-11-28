@@ -9,7 +9,7 @@ let cleanup = null;
 function header() {
   const me = store.me;
   const langSw = h('div', { class: 'lang', role: 'group', 'aria-label': 'Язык / Тіл' },
-    ['ru', 'kk'].map((l) => h('button', { class: lang() === l ? 'on' : '', onClick: () => { setLang(l); render(); } }, l === 'ru' ? 'RU' : 'ҚАЗ')));
+    ['ru', 'kk', 'en'].map((l) => h('button', { class: lang() === l ? 'on' : '', onClick: () => { setLang(l); render(); } }, { ru: 'RU', kk: 'ҚАЗ', en: 'EN' }[l])));
   return h('header', { class: 'top' }, h('div', { class: 'in' },
     h('a', { class: 'brand', href: '#/' },
       h('img', { src: '/img/icon-192.png', alt: 'SL165' }),

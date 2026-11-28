@@ -1,0 +1,275 @@
+381|and enter the PIN:
+382|Shuffle teams
+383|Start game
+384|Waiting for students
+385|Still choosing a team:
+386|points
+387|answered
+388|Team answering
+389|Enter the answer on your phone
+390|End question
+391|Grade the answers
+392|Expected answers:
+393|Done — show results
+394|The rope was pulled all the way
+395|Game results
+396|points
+397|team points
+398|correct
+399|avg. time
+400|players
+401|Detailed report
+402|Two teams on phones pull the rope
+403|A question for one team, then the other
+404|Personal rating of the whole class
+405|No phones, two students at the board
+406|Right team
+407|Left team
+408|Time per question
+409|How many questions
+410|Shuffle questions
+411|Show the question on phones
+412|I grade open answers myself
+413|Students choose their team themselves
+414|Win at a lead of
+415|The quiz has no suitable questions — there will be problems at the class level.
+416|Launch
+417|What is your name?
+418|Have a student account?
+419|Sign in
+420|points will go to the rating
+421|No game with this PIN was found. Check the code on the board.
+422|Enter a name (at least 2 letters)
+423|There are already too many participants in the game
+424|The teacher removed you from the game
+425|Enter another PIN
+426|You are in the game
+427|Choose a team
+428|Your team
+429|Waiting for the teacher to start
+430|In the game
+431|Answer accepted
+432|Waiting for the others…
+433|The team answering now
+434|Look at the question on the board
+435|The teacher is checking the answers
+436|We will know the result in a moment
+437|The other team answered
+438|Partially correct
+439|Place
+440|The winning team
+441|Your place
+442|best streak
+443|New game
+444|My office
+445|With an account your points are saved and you get into the lyceum rating.
+446|Get ready
+447|Rope position
+448|victory
+449|mistakes
+450|per problem
+451|Delete this report from history?
+452|Game report
+453|In the print window choose “Save as PDF”
+454|Download PDF
+455|Draw
+456|participants
+457|duration
+458|correct answers
+459|winner
+460|Rope position during the game
+461|Correct answers
+462|correct
+463|wrong / no answer
+464|Hardest
+465|Easiest
+466|Best
+467|Top 5
+468|Fastest
+469|Most accurate
+470|Best streak
+471|Question statistics
+472|Avg. time
+473|Students
+474|Name
+475|Points
+476|Contribution
+477|Each student’s answers
+478|no answer
+479|First game
+480|First win
+481|Lightning
+482|Sniper
+483|Streak 5
+484|Champion
+485|20 games
+486|Expert
+487|My class
+488|Whole lyceum
+489|level
+490|to level
+491|in the lyceum
+492|games
+493|wins
+494|accuracy
+495|Rewards
+496|Rating
+497|My games
+498|Play your first game — enter the PIN from the board.
+499|Google Gemini — free
+500|Groq — free
+501|OpenRouter — free models
+502|DeepSeek — paid, very cheap
+503|Other (OpenAI-compatible)
+504|Delete the quiz “{name}”?
+505|Copy created
+506|template
+507|All teachers can see it
+508|shared
+509|questions
+510|Қайырлы таң
+511|Сәлеметсіз бе
+512|Қайырлы кеш
+513|Game in progress
+514|Back to the game
+515|First time here?
+516|A short tour shows the whole menu in a minute.
+517|Start the tour
+518|Your own questions, formulas, images
+519|Questions on a topic in a minute
+520|Arqan tartys without phones
+521|Templates and colleagues’ quizzes
+522|quizzes
+523|games played
+524|student participations
+525|all →
+526|Empty for now. Create your first quiz or take a template from the library.
+527|Recent games
+528|Game results will appear here.
+529|draw
+530|With AI
+531|You have no quizzes yet.
+532|Generate with AI
+533|Take a template
+534|Ready templates and quizzes shared by colleagues. Copy to yours to change.
+535|No games found
+536|Play your first game — reports with charts will appear here.
+537|To my quizzes
+538|Password changed
+539|Profile
+540|Change password
+541|Old password
+542|New password
+543|Change password
+544|Interface
+545|Game sounds
+546|Take the tour again
+547|saved
+548|paste the key
+549|Get a key →
+550|AI settings saved
+551|admin
+552|teacher
+553|student
+554|Reset password
+555|Disable
+556|Enable
+557|disabled
+558|Pass the password on in person. All of the user’s sessions will be signed out.
+559|Teacher code
+560|A teacher enters this code when registering. Change it if it reached students.
+561|Save code
+562|AI for question generation
+563|AI is connected. Teachers can generate questions with one button.
+564|Without a key teachers can still use AI through the prompt (copy into any chat). With a free Gemini or Groq key — with one button.
+565|Service
+566|API key
+567|Address and model (for advanced users)
+568|API address
+569|Model
+570|Save AI settings
+571|Users
+572|Teachers
+573|New password:
+574|Add 5 seconds
+575|+5 s
+576|Results of the last question
+577|Next question
+578|Play again
+579|“Play again” — the same quiz, students move to the new game on their own, no PIN needed
+580|Matching
+581|Own subject…
+582|Own subject
+583|For example: French, Psychology
+584|The subject will appear in every teacher’s list
+585|Add
+586|Pairs: left — right. Students will see the right part shuffled
+587|Concept
+588|Its pair
+589|Delete pair
+590|Pair
+591|The score is the share of correct pairs: 2 of 3 give ⅔ of the points
+592|Share with colleagues (will appear in the library)
+593|Tests
+594|on
+595|One quiz
+596|Set of tests on a topic
+597|Set: write a topic, for example “quadratic equations” — the AI will write 3–5 tests from easy to hard
+598|Saved to “My quizzes”: {n}
+599|Save all to “My quizzes”
+600|tests
+601|Test
+602|AI can make mistakes — check the answers. Each test can be opened in the editor and corrected.
+603|Free AI without a key is working: 20–60 seconds, simple questions, it does not read photos. For photos and accuracy the administrator can connect a free Gemini key.
+604|Connect a key
+605|Questions will appear in 10–40 seconds. Nothing to pay
+606|AI will write 3–5 tests from easy to hard
+607|Free AI without a key is working now: it is slower, simpler and does not read photos. With a free Gemini or Groq key the questions are more accurate and faster.
+608|Letter
+609|no letter
+610|Whole school
+611|Grades 1–4
+612|Grades 5–6
+613|Addition and subtraction up to 100, the multiplication table.
+614|Fractions, decimals, percentages, simple equations.
+615|Right on target
+616|Keep it up
+617|Керемет
+618|Your head is working
+619|That is speed
+620|Missed — the next one will be yours
+621|No worries, we play on
+622|Almost. Pull yourself together
+623|This account was signed in on another device, so the session here has ended. One account works on one device only.
+624|The account was signed in on another device
+625|Forgot your password?
+626|Email
+627|optional
+628|Recommended: if you forget your password, we will send a link for a new one
+629|Send the link
+630|If the account has an email, the message with the link is already on its way. Check “Inbox” and “Spam”. The link works for 30 minutes.
+631|Enter the username or the email from your profile. We will send a link to set a new password.
+632|Email recovery is not set up yet. Ask the administrator or a teacher to reset your password.
+633|Username or email
+634|No email in your profile? The site administrator will issue a new password.
+635|Back to sign in
+636|Repeat the password
+637|Save and sign in
+638|The link does not work? Request a new one
+639|Passwords do not match
+640|Recovery email
+641|Current password
+642|If you forget your password, the link for a new one will come here.
+643|Optional but recommended: without an email, a forgotten password can only be restored by the administrator.
+644|Save email
+645|Email for password recovery
+646|Email is connected: the “Forgot your password?” button will send a message with a link.
+647|Create a Gmail for the school, turn on two-step verification and get an “App password” (16 letters). Paste it and the address here.
+648|Get a Google app password →
+649|Email address
+650|App password
+651|Server and port (for advanced users)
+652|Server
+653|Port
+654|Message sent
+655|Send a test message

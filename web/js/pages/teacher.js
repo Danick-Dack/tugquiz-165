@@ -178,7 +178,7 @@ export function settings() {
       emailCard(),
       h('div', { class: 'card stack' }, h('h3', null, t('Интерфейс')),
         h('div', { class: 'row between' }, h('b', null, t('Язык')), h('div', { class: 'seg' },
-          ['ru', 'kk'].map((l) => h('button', { class: lang() === l ? 'on' : '', onClick: () => { setLang(l); render(); } }, l === 'ru' ? 'Русский' : 'Қазақша')))),
+          ['ru', 'kk', 'en'].map((l) => h('button', { class: lang() === l ? 'on' : '', onClick: () => { setLang(l); render(); } }, { ru: 'Русский', kk: 'Қазақша', en: 'English' }[l])))),
         h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: sound.on, onChange: (e) => { sound.on = e.target.checked; if (sound.on) sound.good(); } }), t('Звуки в игре')),
         h('button', { class: 'btn', onClick: () => import('./guide.js').then((m) => m.startTour()) }, ic('help'), t('Пройти тур заново')))));
 }

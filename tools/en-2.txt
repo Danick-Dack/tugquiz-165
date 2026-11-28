@@ -1,0 +1,270 @@
+111|The administrator has not connected an AI key yet. Use the “Through any chat” method — it is free and works right away.
+112|Connect key →
+113|Paste the whole neural network reply (JSON) here
+114|Copy the prompt
+115|Copy prompt
+116|Paste it into any free AI chat
+117|Attach the same photo with examples in the chat
+118|Copy the reply and paste it here
+119|Recognise questions
+120|Press “Show” to see the prompt.
+121|With one button
+122|Through any chat (no key)
+123|AI question generator
+124|Describe a topic — the neural network will write questions, and you check them and start the game. Free.
+125|AI generator
+126|Sign in
+127|Username
+128|Password
+129|No account?
+130|Student sign-up
+131|Teacher sign-up
+132|You can also play without an account:
+133|enter a PIN
+134|For example: Aigul Serikbayevna
+135|First and last name
+136|Administrator account
+137|This is the first launch of the site. The first account becomes the administrator: it issues the teacher code and sets up AI.
+138|First name and patronymic (how students address you)
+139|Latin letters, 3–32 characters
+140|At least 8 characters, not only digits
+141|Teacher code
+142|The code is issued by the site administrator
+143|Create account
+144|Already have an account?
+145|Student
+146|Teacher
+147|— choose —
+148|Level
+149|Negative numbers, powers, percentages, equations.
+150|Squares, roots, Vieta’s theorem, discriminant, percentages.
+151|Logarithms, derivatives, progressions, factorials, trigonometry, integrals.
+152|Quiz
+153|Multiple choice, true/false and numeric questions fit.
+154|You have no quizzes yet — use the problem generator.
+155|Mental arithmetic
+156|This quiz has no suitable questions
+157|Generator
+158|My quiz
+159|Own topic with AI
+160|Arqan tartys without phones: two students at the interactive board, each with their own problems. A correct answer jerks the rope to their side.
+161|Teams and rules
+162|Right
+163|Left
+164|A lead is needed to win
+165|Press “Start”
+166|Start
+167|Again
+168|View the rope
+169|The result is saved to history
+170|The formula will appear here
+171|Formula builder
+172|Formula (LaTeX)
+173|Press the buttons or type yourself: fraction — \frac{1}{2}, power — x^{2}, root — \sqrt{x}.
+174|Video for the question
+175|Loading…
+176|Uploaded
+177|Upload MP4 / WebM (up to 50 MB)
+178|Upload a file (JPG, PNG, GIF, WebP up to 5 MB)
+179|or paste a link
+180|YouTube, Vimeo and direct video links are supported. No autoplay.
+181|Add by link
+182|The link must start with https://
+183|text
+184|Link text
+185|Link
+186|item
+187|Bold
+188|Italic
+189|Underline
+190|List
+191|Formula
+192|Options (click the letter of the correct one)
+193|Option
+194|formula
+195|Remove image
+196|Delete option
+197|Correct:
+198|Correct answer
+199|Correct answer — a number (several separated by ;)
+200|Accepted answers separated by ;
+201|tenge; teńge
+202|Write fractions as 0.5 or 1/2. Such questions suit the board game with a digital keypad.
+203|Case and punctuation do not matter. If left empty, you grade answers yourself during the game (✓, ½, ✗).
+204|Time to answer
+205|Double points
+206|Up
+207|Down
+208|Duplicate
+209|Delete question
+210|Delete question {n}?
+211|Question text. Formulas — $x^2$, bold — **text**
+212|Explanation after the answer (optional)
+213|Why this answer is correct
+214|answer time
+215|there are unsaved changes
+216|Quiz title
+217|For example: Quadratic equations, grade 8
+218|Description (optional)
+219|Share with the lyceum teachers (will appear in the library)
+220|Leave without saving?
+221|My quizzes
+222|Editing
+223|New quiz
+224|Save and launch
+225|Add a question:
+226|(no text)
+227|total time
+228|Take it as a student
+229|Time is up
+230|left
+231|Correct answer:
+232|Your answer
+233|untitled
+234|Four question types: choice, true/false, number and own answer. Formulas, images, video and links.
+235|All your quizzes. The green ▶ button starts the game in one of four modes.
+236|Library
+237|Ready-made templates by lyceum subjects and colleagues’ quizzes. Copy them and change.
+238|Topic → the neural network writes questions. Free: the prompt is copied into any chat, the reply is pasted back.
+239|Arqan tartys without phones: two halves of the interactive board, each team with its own problems.
+240|Reports: rope charts, hard questions, top students. Saved as PDF.
+241|Detailed instructions and examples. You can retake the tour in “Settings”.
+242|The teacher sign-up code, the AI key and the list of users.
+243|Skip
+244|Tip: start with the library — launch a ready template and see how students play.
+245|Open the library
+246|Quick start
+247|Creating a quiz
+248|Formulas and formatting
+249|Free AI
+250|Game modes
+251|How students join
+252|Reports and PDF
+253|Frequently asked questions
+254|Take a quiz
+255|From the library (ready templates), create one yourself or ask AI.
+256|Press ▶ “Launch”
+257|Choose a mode: Arqan tartys, teams in turn, everyone for themselves or the rope on the board.
+258|Show the screen on the board
+259|Students open the site on a phone and enter the PIN or scan the QR code.
+260|Press “Start game”
+261|Then space bar or a clicker: next question, results, the final with a winner.
+262|Take the menu tour
+263|Title, subject and grade
+264|Subjects are as in the lyceum timetable. You can share a quiz with colleagues with the tick at the bottom.
+265|Question type
+266|“Multiple choice” — 2–6 options, click the letter of the correct one. “True / false”. “Number” — for problems and the board game. “Own answer” — the student types text.
+267|Time and double points
+268|The answer time is chosen next to the question type, the ×2 button gives double points.
+269|Images and video
+270|An image is a file or a link, the site compresses it itself. Video — YouTube, Vimeo or a file up to 50 MB.
+271|The “Preview” button — take the quiz as a student with the timer, see all questions and the total time.
+272|Try right here — type on the left, and on the right you instantly see how students will see it:
+273|bold
+274|italic
+275|underline
+276|a link, opens in a new tab
+277|list
+278|fraction
+279|power and subscript
+280|root
+281|formula on its own line
+282|The editor has a Σ button — a formula builder with ready buttons: fractions, roots, Greek letters, integrals, matrices.
+283|Open the formula builder
+284|Method 1
+285|through any chat — no key, always free
+286|Fill in the topic
+287|Subject, grade, topic, how many questions and which types.
+288|The “Copy prompt” button — it already describes the required format.
+289|Paste into a chat
+290|ChatGPT, DeepSeek, Gemini, Qwen or Claude — any free one.
+291|Paste the reply back
+292|The site recognises the questions itself. Check them and open them in the editor.
+293|Method 2
+294|with one button
+295|The administrator once pastes a free Google Gemini or Groq key in “Administrator → AI”. After that questions appear with the “Generate” button.
+296|Open the AI generator
+297|Try it: keep pressing — this is how correct answers pull the rope
+298|Red jerk
+299|Blue jerk
+300|Arqan tartys
+301|Two teams on phones. Each correct answer pulls the rope, a fast one pulls harder. The force is divided by team size, so unequal teams compete fairly. You win when the ribbon reaches the line or on points.
+302|Teams in turn
+303|Odd questions go to the first team, even ones to the second. A team’s points = the average of its players’ points, so team size does not matter.
+304|Everyone for themselves
+305|The whole class answers every question. Points: up to 500 for correctness and up to 500 for speed, with a streak bonus. You can grade open answers yourself: ✓, ½ or ✗.
+306|No phones. Two students at the board, each with their own questions and a digital keypad. A mistake means a 1.2-second pause.
+307|Open the site
+308|From any phone or tablet, with no app to install. The address and QR code are shown on the board.
+309|Enter the PIN
+310|6 digits from the board. If the student has an account, their points go to the lyceum rating and their profile.
+311|Choose a team
+312|If you allowed choosing. Otherwise the site splits them evenly. To move a student, click their name in the lobby.
+313|Answer
+314|After answering, the student sees whether it was right, how many points and their place. If the connection drops, they return to the game with the same points.
+315|Open “Tug-of-war board”
+316|Choose the problem level (grade 7, 8–9 or 10–11), your own quiz or any topic through AI.
+317|Name the teams and set the time
+318|For example “Team 1” and “Team 2”, 90 seconds, a lead of 8 answers.
+319|Press “Full screen” and “Start”
+320|Left and right, the teams have their own questions and keypads. Correct — a jerk of the rope, a mistake — a pause.
+321|Results are saved to history
+322|How many right and wrong for each team and the average speed.
+323|All games played with the winners. Click a game to open its report.
+324|What is in the report
+325|The rope chart, percentage correct, the hardest questions, top 5, the fastest and most accurate students, contribution to the team, each student’s answers.
+326|The “Download PDF” button → in the print window choose “Save as PDF”. Kazakh letters and formulas are preserved.
+327|How many students can play?
+328|Up to 300 in one game. Enough for a class and even an assembly hall.
+329|A student closed the tab or lost the internet
+330|Let them open the site again and enter the same PIN — they return with the same points.
+331|Do students need to register?
+332|No, they can play by name. An account is needed for rating, levels and rewards.
+333|How do I change the language?
+334|The RU / KZ / EN switch in the site header. The language of the questions is chosen in the quiz.
+335|A student wrote an inappropriate name
+336|Click the name in the lobby → “Remove from game”.
+337|AI questions with mistakes
+338|AI can make mistakes. Always check the questions before the game — they open in the editor.
+339|Teacher’s guide
+340|Everything about TugQuiz in 5 minutes. You can try the examples right here.
+341|Menu tour
+342|Open the office
+343|I am a teacher
+344|I am a student
+345|First launch:
+346|create the administrator account
+347|in the world of knowledge
+348|The teacher launches a quiz on the board, students answer from phones. Right and fast — and the rope pulls your way.
+349|Join the game
+350|Enter the PIN from the board
+351|Play
+352|For teachers
+353|Quizzes in all lyceum subjects
+354|Formulas, images, video and links
+355|AI writes questions on a topic in a minute
+356|Reports with charts and PDF
+357|Sign in as a teacher
+358|For students
+359|Join by PIN with no app to install
+360|Teams or everyone for themselves
+361|Points for correctness and speed
+362|Personal rating, levels and rewards
+363|Four game modes
+364|Two teams answer from phones, each right and fast answer pulls the rope
+365|A question for the first team, then the second, points for correctness and speed
+366|The whole class answers a question, the teacher can grade open answers
+367|No phones: two halves of the interactive board, each team with its own problems
+368|Teacher?
+369|Go to the office
+370|Leaders
+371|Streak
+372|Game not found or already finished
+373|To the office
+374|no connection…
+375|End the game now and show the results?
+376|Exit to the office
+377|Exit? The game stays available, you can return from the office home.
+378|Move to a team
+379|Remove from game
+380|Open

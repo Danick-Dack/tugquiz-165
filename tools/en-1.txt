@@ -1,0 +1,111 @@
+0|Invalid name. Write your real first and last name, for example: Aigerim Serikova
+1|Your real name, surname optional — this is how the teacher will see you
+2|Home
+3|Remove video
+4|Log out
+5|Log in
+6|Tug-of-war board
+7|Game history
+8|Guide
+9|Settings
+10|Administrator
+11|new
+12|Teacher menu
+13|Create quiz
+14|More
+15|Menu
+16|Something went wrong
+17|To home
+18|Server unavailable
+19|Error
+20|Close
+21|Yes
+22|Please confirm
+23|Cancel
+24|Copied
+25|File is larger than {n} MB
+26|Quizzes and “Arqan tartys” for lessons · founded in 1991
+27|Grade 7
+28|Grades 8–9
+29|Grades 10–11
+30|Multiple choice
+31|True / false
+32|Number
+33|Own answer
+34|True
+35|False
+36|easy
+37|medium
+38|hard
+39|olympiad
+40|Subject
+41|Grade
+42|Language
+43|Russian
+44|Difficulty
+45|Done
+46|questions
+47|Title
+48|Show
+49|Start
+50|Questions
+51|Time
+52|s
+53|Paste
+54|Image
+55|Video
+56|Preview
+57|Delete
+58|Save
+59|Back
+60|Next
+61|Question
+62|Answer
+63|Answer
+64|Game
+65|Teams
+66|Team
+67|of
+68|Red
+69|Blue
+70|Team 1
+71|Team 2
+72|all
+73|All
+74|grade
+75|any
+76|Saved
+77|Deleted
+78|Launch
+79|Edit
+80|Copy
+81|Copy to mine
+82|Nothing found
+83|Search by title
+84|Nobody yet
+85|Sound
+86|Full screen
+87|Finish
+88|Results
+89|Photo with examples (textbook, board)
+90|Remove photo
+91|Topic — any, in your own words
+92|For example: logarithms; Abai Kunanbayev; Present Perfect
+93|Which tasks you need (example)
+94|For example: log_2 8 = ?, find x: 3x − 7 = 20. The AI will make similar ones with other numbers.
+95|How many
+96|Types
+97|Extra
+98|Wishes
+99|For example: more tasks with formulas, no dates
+100|Quiz by AI
+101|Select at least one question
+102|Open in editor
+103|Quiz saved
+104|Play on the board
+105|Skipped
+106|AI can make mistakes — check the answers. Untick the questions you do not want.
+107|graded by the teacher
+108|AI is thinking
+109|Generate
+110|Questions will appear in 10–40 seconds. Nothing to pay.
